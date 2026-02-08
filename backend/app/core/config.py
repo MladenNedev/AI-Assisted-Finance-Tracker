@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     secret_key: str = Field(default="change-me", alias="SECRET_KEY")
     cookie_name: str = Field(default="finance_session", alias="COOKIE_NAME")
+    session_max_age_seconds: int = Field(default=86400, alias="SESSION_MAX_AGE_SECONDS")
     cors_origins: str = Field(default="http://localhost:5173", alias="CORS_ORIGINS")
     sql_echo: bool = Field(default=False, alias="SQL_ECHO")
 
