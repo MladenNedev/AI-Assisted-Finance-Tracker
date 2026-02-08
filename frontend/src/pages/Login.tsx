@@ -1,32 +1,93 @@
+import { useState } from "react";
 import {
-    Button,
-    Paper,
-    PasswordInput,
-    Stack,
-    Text,
-    TextInput,
-    Title
-  } from "@mantine/core";
-  
-  type LoginProps = {
-    onSuccess?: () => void;
+  Anchor,
+  Button,
+  Paper,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+  Title
+} from "@mantine/core";
+import { useNavigate } from "react-router-dom";
+import { ApiError } from "../api/client";
+import { useAuth } from "../contexts/AuthContext";
+
+export default function Login() {
+  const navigate = useNavigate();
+  const { login, register } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setErrorMessage(null);
+    setSubmitting(true);
+
+    try {
+      if (isRegisterMode) {
+        await register({ email, password });
+      }
+      await login({ email, password });
+      navigate("/dashboard", { replace: true });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setErrorMessage(`Authentication failed (HTTP ${error.status})`);
+      } else {
+        setErrorMessage("Authentication failed");
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
-  
-  export default function Login({ onSuccess }: LoginProps) {
-    return (
-      <Stack align="center" mt="xl">
-        <Paper withBorder shadow="sm" radius="md" p="xl" w={360}>
+
+  return (
+    <Stack align="center" mt="xl">
+      <Paper withBorder shadow="sm" radius="md" p="xl" w={360}>
+        <form onSubmit={onSubmit}>
           <Stack>
-            <Title order={3}>Sign in</Title>
+            <Title order={3}>{isRegisterMode ? "Create account" : "Sign in"}</Title>
             <Text c="dimmed" size="sm">
-              Use your internal account. Auth flow is coming in Phase 1.
+              Internal access only. Cookie sessions are enabled.
             </Text>
-            <TextInput label="Email" placeholder="you@company.com" />
-            <PasswordInput label="Password" placeholder="••••••••" />
-            <Button onClick={onSuccess}>Continue</Button>
+            <TextInput
+              label="Email"
+              placeholder="you@company.com"
+              value={email}
+              onChange={(event) => setEmail(event.currentTarget.value)}
+              required
+            />
+            <PasswordInput
+              label="Password"
+              placeholder="At least 8 characters, letters and numbers"
+              value={password}
+              onChange={(event) => setPassword(event.currentTarget.value)}
+              required
+            />
+            {errorMessage && (
+              <Text c="red" size="sm">
+                {errorMessage}
+              </Text>
+            )}
+            <Button type="submit" loading={submitting}>
+              {isRegisterMode ? "Register and sign in" : "Sign in"}
+            </Button>
+            <Anchor
+              component="button"
+              type="button"
+              size="sm"
+              onClick={() => setIsRegisterMode((current) => !current)}
+            >
+              {isRegisterMode
+                ? "Already have an account? Sign in"
+                : "Need an account? Register"}
+            </Anchor>
           </Stack>
-        </Paper>
-      </Stack>
-    );
-  }
-  
+        </form>
+      </Paper>
+    </Stack>
+  );
+}
