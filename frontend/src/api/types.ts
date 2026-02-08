@@ -28,3 +28,84 @@ export interface UserResponse {
   created_at: string;
   updated_at: string;
 }
+
+export type AccountType =
+  | "CHECKING"
+  | "SAVINGS"
+  | "CREDIT_CARD"
+  | "CASH"
+  | "INVESTMENT";
+
+export type TransactionDirection = "IN" | "OUT";
+
+export interface AccountResponse {
+  id: string;
+  user_id: string;
+  name: string;
+  account_type: AccountType;
+  currency: string;
+  opening_balance: string;
+  current_balance: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CategoryResponse {
+  id: string;
+  user_id: string;
+  name: string;
+  is_income: boolean;
+  color: string | null;
+  icon: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CreateAccountRequest {
+  name: string;
+  account_type: AccountType;
+  opening_balance: string;
+  currency: string;
+}
+
+export interface UpdateAccountRequest {
+  name?: string;
+  account_type?: AccountType;
+  currency?: string;
+}
+
+export interface AccountBalanceResponse {
+  account_id: string;
+  balance: string;
+}
+
+export interface TransactionResponse {
+  id: string;
+  account_id: string;
+  category_id: string | null;
+  amount: string;
+  direction: TransactionDirection;
+  signed_amount: string;
+  merchant: string | null;
+  note: string | null;
+  occurred_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTransactionRequest {
+  account_id: string;
+  amount: string;
+  direction: TransactionDirection;
+  occurred_at: string;
+  merchant?: string;
+  note?: string;
+}
