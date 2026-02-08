@@ -37,3 +37,20 @@ class ResourceNotFoundError(DomainExceptionError):
 class BudgetExceededError(DomainExceptionError):
     status_code = 400
     code = "budget_exceeded"
+
+
+class AccountNotFoundError(ResourceNotFoundError):
+    code = "account_not_found"
+
+
+class TransactionNotFoundError(ResourceNotFoundError):
+    code = "transaction_not_found"
+
+
+class CategoryNotFoundError(ResourceNotFoundError):
+    code = "category_not_found"
+
+
+class CategoryAlreadyExistsError(DomainExceptionError):
+    status_code = 409
+    code = "category_already_exists"

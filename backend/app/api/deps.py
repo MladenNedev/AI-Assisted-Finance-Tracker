@@ -7,9 +7,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
 from app.persistence.models import User
-from app.persistence.repositories import SessionRepository, UserRepository
+from app.persistence.repositories import (
+    AccountRepository,
+    CategoryRepository,
+    SessionRepository,
+    TransactionRepository,
+    UserRepository,
+)
 from app.persistence.session import AsyncSessionLocal
+from app.services.account_service import AccountService
 from app.services.auth_service import AuthService
+from app.services.category_service import CategoryService
+from app.services.transaction_service import TransactionService
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -29,6 +38,24 @@ def get_session_repository(
     return SessionRepository(session)
 
 
+def get_account_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AccountRepository:
+    return AccountRepository(session)
+
+
+def get_transaction_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TransactionRepository:
+    return TransactionRepository(session)
+
+
+def get_category_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> CategoryRepository:
+    return CategoryRepository(session)
+
+
 def get_auth_service(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
@@ -39,6 +66,34 @@ def get_auth_service(
         user_repository=user_repository,
         session_repository=session_repository,
     )
+
+
+def get_account_service(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    account_repository: Annotated[AccountRepository, Depends(get_account_repository)],
+) -> AccountService:
+    return AccountService(session=session, account_repository=account_repository)
+
+
+def get_transaction_service(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    account_repository: Annotated[AccountRepository, Depends(get_account_repository)],
+    transaction_repository: Annotated[TransactionRepository, Depends(get_transaction_repository)],
+    category_repository: Annotated[CategoryRepository, Depends(get_category_repository)],
+) -> TransactionService:
+    return TransactionService(
+        session=session,
+        account_repository=account_repository,
+        transaction_repository=transaction_repository,
+        category_repository=category_repository,
+    )
+
+
+def get_category_service(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    category_repository: Annotated[CategoryRepository, Depends(get_category_repository)],
+) -> CategoryService:
+    return CategoryService(session=session, category_repository=category_repository)
 
 
 async def get_current_user(
