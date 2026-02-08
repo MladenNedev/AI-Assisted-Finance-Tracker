@@ -1,11 +1,13 @@
 import asyncio
 from collections.abc import Generator
+from uuid import uuid4
 
 import pytest
 from app.core.config import get_settings
 from app.main import app
 from app.persistence.models import Base
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
@@ -25,6 +27,8 @@ async def _drop_schema() -> None:
     engine = _make_test_engine()
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
+        # Keep Alembic state and test-created tables in sync across local runs.
+        await connection.execute(text("DROP TABLE IF EXISTS alembic_version"))
     await engine.dispose()
 
 
@@ -62,3 +66,20 @@ def clear_client_cookies(client: TestClient) -> Generator[None, None, None]:
     client.cookies.clear()
     yield
     client.cookies.clear()
+
+
+@pytest.fixture
+def authenticated_client(client: TestClient) -> TestClient:
+    email = f"user-{uuid4().hex}@example.com"
+    register_response = client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "password123"},
+    )
+    assert register_response.status_code == 201
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "password123"},
+    )
+    assert login_response.status_code == 200
+    return client
