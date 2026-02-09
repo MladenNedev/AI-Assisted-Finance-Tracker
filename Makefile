@@ -3,7 +3,7 @@ DC = docker compose --env-file .env -f infra/docker-compose.yml
 .PHONY: up down test format lint
 
 up:
-	$(DC) up --build -d
+	$(DC) up --build --renew-anon-volumes -d
 
 down:
 	$(DC) down -v
