@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache
 from app.core.exceptions import AccountNotFoundError
 from app.domain.account import (
     validate_account_currency,
@@ -35,6 +36,7 @@ class AccountService:
             currency=validate_account_currency(currency),
         )
         await self.session.commit()
+        await cache.bump_user_report_version(user_id)
         await self.session.refresh(account)
         return account
 
@@ -88,6 +90,7 @@ class AccountService:
             raise AccountNotFoundError("Account not found")
 
         await self.session.commit()
+        await cache.bump_user_report_version(user_id)
         await self.session.refresh(account)
         return account
 
@@ -96,6 +99,7 @@ class AccountService:
         if account is None:
             raise AccountNotFoundError("Account not found")
         await self.session.commit()
+        await cache.bump_user_report_version(user_id)
 
     async def get_balance(self, account_id: UUID, user_id: UUID) -> Decimal:
         account = await self.account_repository.get_by_id(

@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache
 from app.core.exceptions import CategoryAlreadyExistsError, CategoryNotFoundError
 from app.domain.category import (
     normalize_category_color,
@@ -39,6 +40,7 @@ class CategoryService:
                 icon=normalize_category_icon(icon),
             )
             await self.session.commit()
+            await cache.bump_user_report_version(user_id)
         except IntegrityError as exc:
             await self.session.rollback()
             raise CategoryAlreadyExistsError("Category already exists") from exc
@@ -92,6 +94,7 @@ class CategoryService:
             raise CategoryNotFoundError("Category not found")
 
         await self.session.commit()
+        await cache.bump_user_report_version(user_id)
         await self.session.refresh(category)
         return category
 
@@ -100,3 +103,4 @@ class CategoryService:
         if not was_deleted:
             raise CategoryNotFoundError("Category not found")
         await self.session.commit()
+        await cache.bump_user_report_version(user_id)

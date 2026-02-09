@@ -347,3 +347,212 @@ class CategoryRepository:
         await self.session.delete(category)
         await self.session.flush()
         return True
+
+
+class ReportingRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_cashflow_summary(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+    ) -> dict[str, Decimal]:
+        stmt = (
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                Transaction.direction == TransactionDirection.IN.value,
+                                Transaction.amount,
+                            ),
+                            else_=Decimal("0"),
+                        )
+                    ),
+                    Decimal("0"),
+                ).label("income"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                Transaction.direction == TransactionDirection.OUT.value,
+                                Transaction.amount,
+                            ),
+                            else_=Decimal("0"),
+                        )
+                    ),
+                    Decimal("0"),
+                ).label("expenses"),
+            )
+            .select_from(Transaction)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(
+                Account.user_id == user_id,
+                Transaction.occurred_at >= from_date,
+                Transaction.occurred_at < to_date,
+            )
+        )
+        row = (await self.session.execute(stmt)).one()
+        income = Decimal(row.income or 0)
+        expenses = Decimal(row.expenses or 0)
+        return {"income": income, "expenses": expenses, "net": income - expenses}
+
+    async def get_cashflow_by_period(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        *,
+        granularity: str,
+    ) -> list[dict[str, Decimal | datetime]]:
+        if granularity == "week":
+            period_expr = func.date_trunc("week", Transaction.occurred_at)
+        elif granularity == "month":
+            period_expr = func.date_trunc("month", Transaction.occurred_at)
+        else:
+            period_expr = func.date_trunc("day", Transaction.occurred_at)
+
+        income_expr = func.coalesce(
+            func.sum(
+                case(
+                    (Transaction.direction == TransactionDirection.IN.value, Transaction.amount),
+                    else_=Decimal("0"),
+                )
+            ),
+            Decimal("0"),
+        )
+        expense_expr = func.coalesce(
+            func.sum(
+                case(
+                    (Transaction.direction == TransactionDirection.OUT.value, Transaction.amount),
+                    else_=Decimal("0"),
+                )
+            ),
+            Decimal("0"),
+        )
+
+        stmt = (
+            select(
+                period_expr.label("period"),
+                income_expr.label("income"),
+                expense_expr.label("expenses"),
+            )
+            .select_from(Transaction)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(
+                Account.user_id == user_id,
+                Transaction.occurred_at >= from_date,
+                Transaction.occurred_at < to_date,
+            )
+            .group_by(period_expr)
+            .order_by(period_expr.asc())
+        )
+        rows = (await self.session.execute(stmt)).all()
+        points: list[dict[str, Decimal | datetime]] = []
+        for row in rows:
+            income = Decimal(row.income or 0)
+            expenses = Decimal(row.expenses or 0)
+            points.append(
+                {
+                    "period": row.period,
+                    "income": income,
+                    "expenses": expenses,
+                    "net": income - expenses,
+                }
+            )
+        return points
+
+    async def get_category_breakdown(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        *,
+        direction: TransactionDirection,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        amount_expr = func.coalesce(func.sum(Transaction.amount), Decimal("0"))
+        stmt = (
+            select(
+                Category.id.label("category_id"),
+                Category.name.label("category_name"),
+                Category.color,
+                Category.icon,
+                amount_expr.label("amount"),
+            )
+            .select_from(Transaction)
+            .join(Account, Account.id == Transaction.account_id)
+            .outerjoin(Category, Category.id == Transaction.category_id)
+            .where(
+                Account.user_id == user_id,
+                Transaction.direction == direction.value,
+                Transaction.occurred_at >= from_date,
+                Transaction.occurred_at < to_date,
+            )
+            .group_by(Category.id, Category.name, Category.color, Category.icon)
+            .order_by(amount_expr.desc())
+            .limit(limit)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [
+            {
+                "category_id": row.category_id,
+                "category_name": row.category_name or "Uncategorized",
+                "color": row.color,
+                "icon": row.icon,
+                "amount": Decimal(row.amount or 0),
+            }
+            for row in rows
+        ]
+
+    async def get_account_balances_summary(self, user_id: UUID) -> list[dict[str, object]]:
+        movement_subquery = (
+            select(
+                Transaction.account_id.label("account_id"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                Transaction.direction == TransactionDirection.IN.value,
+                                Transaction.amount,
+                            ),
+                            else_=-Transaction.amount,
+                        )
+                    ),
+                    Decimal("0"),
+                ).label("movement"),
+            )
+            .select_from(Transaction)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(Account.user_id == user_id)
+            .group_by(Transaction.account_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                Account.id,
+                Account.name,
+                Account.account_type,
+                Account.currency,
+                Account.opening_balance,
+                func.coalesce(movement_subquery.c.movement, Decimal("0")).label("movement"),
+            )
+            .select_from(Account)
+            .outerjoin(movement_subquery, movement_subquery.c.account_id == Account.id)
+            .where(Account.user_id == user_id, Account.is_active.is_(True))
+            .order_by(Account.created_at.asc())
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [
+            {
+                "account_id": row.id,
+                "account_name": row.name,
+                "account_type": row.account_type,
+                "currency": row.currency,
+                "balance": Decimal(row.opening_balance) + Decimal(row.movement or 0),
+            }
+            for row in rows
+        ]

@@ -109,3 +109,58 @@ export interface CreateTransactionRequest {
   merchant?: string;
   note?: string;
 }
+
+export type ReportPeriod = "day" | "week" | "month" | "year";
+export type ReportGranularity = "day" | "week" | "month";
+export type CategoryBreakdownType = "expense" | "income";
+
+export interface AccountBalanceSummaryItem {
+  account_id: string;
+  account_name: string;
+  account_type: AccountType;
+  currency: string;
+  balance: string;
+}
+
+export interface DashboardSummaryResponse {
+  period: ReportPeriod;
+  from_date: string;
+  to_date: string;
+  income: string;
+  expenses: string;
+  net: string;
+  total_balance: string;
+  account_count: number;
+  accounts: AccountBalanceSummaryItem[];
+}
+
+export interface CashflowPoint {
+  period: string;
+  income: string;
+  expenses: string;
+  net: string;
+}
+
+export interface CashflowTrendResponse {
+  from_date: string;
+  to_date: string;
+  granularity: ReportGranularity;
+  points: CashflowPoint[];
+}
+
+export interface CategoryBreakdownItem {
+  category_id: string | null;
+  category_name: string;
+  color: string | null;
+  icon: string | null;
+  amount: string;
+  percentage: number;
+}
+
+export interface CategoryBreakdownResponse {
+  from_date: string;
+  to_date: string;
+  breakdown_type: CategoryBreakdownType;
+  total: string;
+  categories: CategoryBreakdownItem[];
+}

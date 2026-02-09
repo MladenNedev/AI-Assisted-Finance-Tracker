@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -6,6 +8,7 @@ from starlette.responses import Response
 
 from app.api.errors import add_exception_handlers
 from app.api.v1 import api_router
+from app.core.cache import cache
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 
@@ -16,11 +19,20 @@ class CookieSessionMiddleware(BaseHTTPMiddleware):
         return response
 
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await cache.connect()
+    try:
+        yield
+    finally:
+        await cache.disconnect()
+
+
 def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
 
-    app = FastAPI(title="AI-Assisted Finance Tracker", version="0.1.0")
+    app = FastAPI(title="AI-Assisted Finance Tracker", version="0.1.0", lifespan=lifespan)
 
     app.add_middleware(CookieSessionMiddleware)
     app.add_middleware(
