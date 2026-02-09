@@ -63,13 +63,17 @@ def client() -> Generator[TestClient, None, None]:
 
 @pytest.fixture(autouse=True)
 def clear_client_cookies(client: TestClient) -> Generator[None, None, None]:
+    settings = get_settings()
     client.cookies.clear()
+    client.headers.pop(settings.csrf_header_name, None)
     yield
     client.cookies.clear()
+    client.headers.pop(settings.csrf_header_name, None)
 
 
 @pytest.fixture
 def authenticated_client(client: TestClient) -> TestClient:
+    settings = get_settings()
     email = f"user-{uuid4().hex}@example.com"
     register_response = client.post(
         "/api/v1/auth/register",
@@ -82,4 +86,9 @@ def authenticated_client(client: TestClient) -> TestClient:
         json={"email": email, "password": "password123"},
     )
     assert login_response.status_code == 200
+    csrf_cookie = login_response.cookies.get(settings.csrf_cookie_name) or client.cookies.get(
+        settings.csrf_cookie_name
+    )
+    if csrf_cookie:
+        client.headers[settings.csrf_header_name] = csrf_cookie
     return client

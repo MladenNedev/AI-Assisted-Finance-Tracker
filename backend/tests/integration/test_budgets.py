@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from app.core.config import get_settings
 from fastapi.testclient import TestClient
 
 
@@ -34,10 +35,12 @@ def _create_category(
     *,
     name: str,
     is_income: bool = False,
+    headers: dict[str, str] | None = None,
 ) -> dict[str, str]:
     response = client.post(
         "/api/v1/categories",
         json={"name": name, "is_income": is_income, "color": "#ABCDEF"},
+        headers=headers,
     )
     assert response.status_code == 201
     return response.json()
@@ -49,6 +52,7 @@ def _create_budget(
     category_id: str,
     month: str,
     limit_amount: str,
+    headers: dict[str, str] | None = None,
 ) -> dict[str, str]:
     response = client.post(
         "/api/v1/budgets",
@@ -57,6 +61,7 @@ def _create_budget(
             "month": month,
             "limit_amount": limit_amount,
         },
+        headers=headers,
     )
     assert response.status_code == 201
     return response.json()
@@ -80,6 +85,12 @@ def _create_expense_transaction(
         },
     )
     assert response.status_code == 201
+
+
+def _csrf_headers(client: TestClient) -> dict[str, str]:
+    settings = get_settings()
+    token = client.cookies.get(settings.csrf_cookie_name)
+    return {settings.csrf_header_name: token} if token else {}
 
 
 def test_create_budget_success(authenticated_client: TestClient) -> None:
@@ -250,14 +261,15 @@ def test_budget_access_is_scoped_per_user(client: TestClient) -> None:
         ).status_code
         == 200
     )
-    category = _create_category(client, name="Owner-only")
+    category = _create_category(client, name="Owner-only", headers=_csrf_headers(client))
     budget = _create_budget(
         client,
         category_id=category["id"],
         month=_current_month(),
         limit_amount="100.00",
+        headers=_csrf_headers(client),
     )
-    assert client.post("/api/v1/auth/logout").status_code == 200
+    assert client.post("/api/v1/auth/logout", headers=_csrf_headers(client)).status_code == 200
 
     # User B should not see User A's budget.
     second_email = "budget-reader@example.com"
