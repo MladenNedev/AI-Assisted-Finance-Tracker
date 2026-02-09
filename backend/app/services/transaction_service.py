@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache
 from app.core.exceptions import (
     AccountNotFoundError,
     CategoryNotFoundError,
@@ -63,6 +64,7 @@ class TransactionService:
             note=normalize_note(note),
         )
         await self.session.commit()
+        await cache.bump_user_report_version(user_id)
         await self.session.refresh(transaction)
         return transaction
 
@@ -156,6 +158,7 @@ class TransactionService:
             raise TransactionNotFoundError("Transaction not found")
 
         await self.session.commit()
+        await cache.bump_user_report_version(user_id)
         await self.session.refresh(updated)
         return updated
 
@@ -164,6 +167,7 @@ class TransactionService:
         if not was_deleted:
             raise TransactionNotFoundError("Transaction not found")
         await self.session.commit()
+        await cache.bump_user_report_version(user_id)
 
     async def _ensure_account_access(self, user_id: UUID, account_id: UUID) -> None:
         account = await self.account_repository.get_by_id(
