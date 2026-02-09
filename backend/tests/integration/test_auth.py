@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+from app.core.cache import cache
 from app.core.config import get_settings
 from fastapi.testclient import TestClient
 
@@ -174,3 +175,31 @@ def test_login_rate_limit_enforced(client: TestClient) -> None:
     finally:
         settings.rate_limit_login_limit = original_limit
         settings.rate_limit_login_window_seconds = original_window
+
+
+def test_login_rate_limit_unavailable_fails_closed(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    email = _unique_email()
+    _register(client, email)
+
+    async def unavailable_increment(*args, **kwargs):  # noqa: ANN002, ANN003
+        return None
+
+    monkeypatch.setattr(cache, "increment_with_ttl", unavailable_increment)
+
+    settings = get_settings()
+    original_fail_closed = settings.rate_limit_auth_fail_closed
+    settings.rate_limit_auth_fail_closed = True
+    try:
+        forwarded_ip = f"198.51.100.{(int(uuid4().hex[:2], 16) % 200) + 1}"
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "password123"},
+            headers={"X-Forwarded-For": forwarded_ip},
+        )
+        assert response.status_code == 503
+        assert response.json()["code"] == "rate_limit_unavailable"
+    finally:
+        settings.rate_limit_auth_fail_closed = original_fail_closed
