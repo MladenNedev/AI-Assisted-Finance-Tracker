@@ -21,6 +21,7 @@ services:
       - ../.env
     depends_on:
       - postgres
+      - redis
     ports:
       - "8000:8000"
     volumes:
@@ -42,5 +43,15 @@ services:
       - /app/node_modules
     command: npm run dev -- --host 0.0.0.0 --port 5173
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
 volumes:
   pgdata:
+  redis_data:
