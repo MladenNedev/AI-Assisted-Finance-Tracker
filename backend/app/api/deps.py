@@ -138,4 +138,6 @@ async def get_current_user(
     token = request.cookies.get(cookie_name)
     if token is None:
         raise AuthenticationError("Not authenticated")
-    return await auth_service.get_current_user_from_session(token)
+    user = await auth_service.get_current_user_from_session(token)
+    request.state.user_id = str(user.id)
+    return user
