@@ -16,6 +16,9 @@
 - Auth login/register limits.
 - Reporting endpoint limits.
 - Can be disabled with `RATE_LIMIT_ENABLED=false`.
+- Hybrid availability policy:
+- Auth endpoints fail closed when Redis is unavailable (`RATE_LIMIT_AUTH_FAIL_CLOSED=true`).
+- Reporting endpoints fail open when Redis is unavailable (`RATE_LIMIT_REPORTING_FAIL_CLOSED=false`).
 
 ## Core Environment Variables
 - `SECRET_KEY`
@@ -33,6 +36,8 @@
 - `RATE_LIMIT_REGISTER_WINDOW_SECONDS`
 - `RATE_LIMIT_REPORTING_LIMIT`
 - `RATE_LIMIT_REPORTING_WINDOW_SECONDS`
+- `RATE_LIMIT_AUTH_FAIL_CLOSED`
+- `RATE_LIMIT_REPORTING_FAIL_CLOSED`
 
 ## Production Notes
 - Set `ENVIRONMENT=production` and a strong `SECRET_KEY`.
