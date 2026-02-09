@@ -68,3 +68,13 @@ class BudgetAlreadyExistsError(DomainExceptionError):
 class InvalidBudgetCategoryError(DomainExceptionError):
     status_code = 400
     code = "invalid_budget_category"
+
+
+class CsrfValidationError(DomainExceptionError):
+    status_code = 403
+    code = "csrf_invalid"
+
+
+class RateLimitExceededError(DomainExceptionError):
+    status_code = 429
+    code = "rate_limited"
