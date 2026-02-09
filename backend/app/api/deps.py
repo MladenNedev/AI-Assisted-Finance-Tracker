@@ -10,6 +10,7 @@ from app.persistence.models import User
 from app.persistence.repositories import (
     AccountRepository,
     CategoryRepository,
+    ReportingRepository,
     SessionRepository,
     TransactionRepository,
     UserRepository,
@@ -18,6 +19,7 @@ from app.persistence.session import AsyncSessionLocal
 from app.services.account_service import AccountService
 from app.services.auth_service import AuthService
 from app.services.category_service import CategoryService
+from app.services.reporting_service import ReportingService
 from app.services.transaction_service import TransactionService
 
 
@@ -54,6 +56,12 @@ def get_category_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> CategoryRepository:
     return CategoryRepository(session)
+
+
+def get_reporting_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ReportingRepository:
+    return ReportingRepository(session)
 
 
 def get_auth_service(
@@ -94,6 +102,12 @@ def get_category_service(
     category_repository: Annotated[CategoryRepository, Depends(get_category_repository)],
 ) -> CategoryService:
     return CategoryService(session=session, category_repository=category_repository)
+
+
+def get_reporting_service(
+    reporting_repository: Annotated[ReportingRepository, Depends(get_reporting_repository)],
+) -> ReportingService:
+    return ReportingService(reporting_repository=reporting_repository)
 
 
 async def get_current_user(
