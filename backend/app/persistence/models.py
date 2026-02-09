@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -46,6 +47,10 @@ class User(Base):
         cascade="all, delete-orphan",
     )
     categories: Mapped[list["Category"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    budgets: Mapped[list["Budget"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -142,6 +147,49 @@ class Category(Base):
 
     user: Mapped[User] = relationship(back_populates="categories")
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="category")
+    budgets: Mapped[list["Budget"]] = relationship(back_populates="category")
+
+
+class Budget(Base):
+    __tablename__ = "budgets"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "category_id",
+            "month_start",
+            name="uq_budgets_user_id_category_id_month_start",
+        ),
+        Index("ix_budgets_user_id_month_start", "user_id", "month_start"),
+        Index("ix_budgets_category_id", "category_id"),
+        CheckConstraint("limit_amount > 0", name="ck_budgets_limit_amount_positive"),
+        CheckConstraint(
+            "month_start = date_trunc('month', month_start::timestamp)::date",
+            name="ck_budgets_month_start_first_day",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    category_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("categories.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    month_start: Mapped[date] = mapped_column(Date, nullable=False)
+    limit_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    user: Mapped[User] = relationship(back_populates="budgets")
+    category: Mapped[Category] = relationship(back_populates="budgets")
 
 
 class Transaction(Base):

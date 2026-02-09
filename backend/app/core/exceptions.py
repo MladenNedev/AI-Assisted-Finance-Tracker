@@ -54,3 +54,17 @@ class CategoryNotFoundError(ResourceNotFoundError):
 class CategoryAlreadyExistsError(DomainExceptionError):
     status_code = 409
     code = "category_already_exists"
+
+
+class BudgetNotFoundError(ResourceNotFoundError):
+    code = "budget_not_found"
+
+
+class BudgetAlreadyExistsError(DomainExceptionError):
+    status_code = 409
+    code = "budget_already_exists"
+
+
+class InvalidBudgetCategoryError(DomainExceptionError):
+    status_code = 400
+    code = "invalid_budget_category"
