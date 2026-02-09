@@ -6,7 +6,7 @@
 - Phase 2: Ledger (transactions)
 - Phase 3: Reporting dashboard
 - Phase 4: Budgets
-- Phase 5: Redis caching
+- Phase 5: Hardening (rate limiting, CSRF, observability)
 - Phase 6: Deployment
 - Phase 7 (optional): AI insights
 
