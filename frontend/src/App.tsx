@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Accounts from "./pages/Accounts";
+import Budgets from "./pages/Budgets";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 
@@ -34,6 +35,14 @@ function AppLayout() {
                 >
                   Accounts
                 </Button>
+                <Button
+                  component={Link}
+                  to="/budgets"
+                  size="xs"
+                  variant={location.pathname.startsWith("/budgets") ? "light" : "subtle"}
+                >
+                  Budgets
+                </Button>
               </Group>
             ) : null}
           </Group>
@@ -58,6 +67,14 @@ function AppLayout() {
             element={
               <ProtectedRoute>
                 <Accounts />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/budgets"
+            element={
+              <ProtectedRoute>
+                <Budgets />
               </ProtectedRoute>
             }
           />
