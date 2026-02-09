@@ -29,6 +29,7 @@ async def enforce_login_rate_limit(request: Request) -> None:
             scope="auth_login",
             limit=settings.rate_limit_login_limit,
             window_seconds=settings.rate_limit_login_window_seconds,
+            fail_closed_on_unavailable=settings.rate_limit_auth_fail_closed,
         ),
     )
 
@@ -43,6 +44,7 @@ async def enforce_register_rate_limit(request: Request) -> None:
             scope="auth_register",
             limit=settings.rate_limit_register_limit,
             window_seconds=settings.rate_limit_register_window_seconds,
+            fail_closed_on_unavailable=settings.rate_limit_auth_fail_closed,
         ),
     )
 

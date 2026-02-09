@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     rate_limit_reporting_window_seconds: int = Field(
         default=60, alias="RATE_LIMIT_REPORTING_WINDOW_SECONDS"
     )
+    rate_limit_auth_fail_closed: bool = Field(default=True, alias="RATE_LIMIT_AUTH_FAIL_CLOSED")
+    rate_limit_reporting_fail_closed: bool = Field(
+        default=False, alias="RATE_LIMIT_REPORTING_FAIL_CLOSED"
+    )
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> Self:

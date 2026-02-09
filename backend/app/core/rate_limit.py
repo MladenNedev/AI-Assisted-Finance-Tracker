@@ -4,7 +4,7 @@ import ipaddress
 from dataclasses import dataclass
 
 from app.core.cache import cache
-from app.core.exceptions import RateLimitExceededError
+from app.core.exceptions import RateLimitExceededError, RateLimitUnavailableError
 from fastapi import Request
 
 
@@ -13,6 +13,7 @@ class RateLimitPolicy:
     scope: str
     limit: int
     window_seconds: int
+    fail_closed_on_unavailable: bool = False
 
 
 def _normalize_ip(raw_ip: str | None) -> str:
@@ -38,6 +39,11 @@ async def enforce_rate_limit(request: Request, policy: RateLimitPolicy) -> None:
     key = f"rate_limit:{policy.scope}:{_extract_client_id(request)}"
     result = await cache.increment_with_ttl(key, ttl_seconds=policy.window_seconds)
     if result is None:
+        if policy.fail_closed_on_unavailable:
+            raise RateLimitUnavailableError(
+                "Rate limiting is temporarily unavailable",
+                details={"scope": policy.scope},
+            )
         return
 
     count, retry_after = result

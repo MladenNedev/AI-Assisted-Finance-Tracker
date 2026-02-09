@@ -28,6 +28,7 @@ async def enforce_reporting_rate_limit(request: Request) -> None:
             scope="reporting",
             limit=settings.rate_limit_reporting_limit,
             window_seconds=settings.rate_limit_reporting_window_seconds,
+            fail_closed_on_unavailable=settings.rate_limit_reporting_fail_closed,
         ),
     )
 

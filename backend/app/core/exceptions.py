@@ -78,3 +78,8 @@ class CsrfValidationError(DomainExceptionError):
 class RateLimitExceededError(DomainExceptionError):
     status_code = 429
     code = "rate_limited"
+
+
+class RateLimitUnavailableError(DomainExceptionError):
+    status_code = 503
+    code = "rate_limit_unavailable"
