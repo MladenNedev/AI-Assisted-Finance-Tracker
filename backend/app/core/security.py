@@ -20,6 +20,10 @@ def generate_session_token() -> str:
     return secrets.token_urlsafe(48)
 
 
+def generate_csrf_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
 def hash_session_token(token: str) -> str:
     secret = get_settings().secret_key.encode("utf-8")
     return hmac.new(secret, token.encode("utf-8"), hashlib.sha256).hexdigest()

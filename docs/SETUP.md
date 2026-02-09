@@ -11,6 +11,8 @@ cp .env.example .env
 make up
 ```
 
+`make up` now starts services, waits for PostgreSQL readiness, and applies Alembic migrations automatically.
+
 Services:
 - Backend: `http://localhost:8000`
 - Frontend: `http://localhost:5173`
@@ -18,6 +20,7 @@ Services:
 
 ## Common Commands
 ```bash
+make migrate
 make test
 make format
 make lint

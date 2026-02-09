@@ -1,6 +1,8 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+from app.core.cache import cache
+from app.core.config import get_settings
 from fastapi.testclient import TestClient
 
 
@@ -161,3 +163,42 @@ def test_reporting_cache_invalidation_on_transaction_write(
     assert updated.status_code == 200
     updated_income = Decimal(updated.json()["income"])
     assert updated_income >= initial_income + Decimal("200.00")
+
+
+def test_reporting_rate_limit_unavailable_fails_open(
+    authenticated_client: TestClient,
+    monkeypatch,
+) -> None:
+    async def unavailable_increment(*args, **kwargs):  # noqa: ANN002, ANN003
+        return None
+
+    monkeypatch.setattr(cache, "increment_with_ttl", unavailable_increment)
+
+    settings = get_settings()
+    original_fail_closed = settings.rate_limit_reporting_fail_closed
+    settings.rate_limit_reporting_fail_closed = False
+    try:
+        response = authenticated_client.get("/api/v1/reporting/dashboard?period=month")
+        assert response.status_code == 200
+    finally:
+        settings.rate_limit_reporting_fail_closed = original_fail_closed
+
+
+def test_reporting_rate_limit_unavailable_fails_closed_when_enabled(
+    authenticated_client: TestClient,
+    monkeypatch,
+) -> None:
+    async def unavailable_increment(*args, **kwargs):  # noqa: ANN002, ANN003
+        return None
+
+    monkeypatch.setattr(cache, "increment_with_ttl", unavailable_increment)
+
+    settings = get_settings()
+    original_fail_closed = settings.rate_limit_reporting_fail_closed
+    settings.rate_limit_reporting_fail_closed = True
+    try:
+        response = authenticated_client.get("/api/v1/reporting/dashboard?period=month")
+        assert response.status_code == 503
+        assert response.json()["code"] == "rate_limit_unavailable"
+    finally:
+        settings.rate_limit_reporting_fail_closed = original_fail_closed

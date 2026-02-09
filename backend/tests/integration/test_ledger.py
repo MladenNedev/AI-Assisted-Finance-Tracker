@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from app.core.config import get_settings
 from fastapi.testclient import TestClient
 
 
@@ -10,6 +11,7 @@ def _create_account(
     name: str = "Primary checking",
     account_type: str = "CHECKING",
     opening_balance: str = "0.00",
+    headers: dict[str, str] | None = None,
 ) -> dict[str, str]:
     response = client.post(
         "/api/v1/accounts",
@@ -19,6 +21,7 @@ def _create_account(
             "opening_balance": opening_balance,
             "currency": "USD",
         },
+        headers=headers,
     )
     assert response.status_code == 201
     return response.json()
@@ -36,6 +39,12 @@ def _create_category(
     )
     assert response.status_code == 201
     return response.json()
+
+
+def _csrf_headers(client: TestClient) -> dict[str, str]:
+    settings = get_settings()
+    token = client.cookies.get(settings.csrf_cookie_name)
+    return {settings.csrf_header_name: token} if token else {}
 
 
 def test_create_account_returns_current_balance(authenticated_client: TestClient) -> None:
@@ -127,8 +136,8 @@ def test_transaction_cannot_use_other_users_account(client: TestClient) -> None:
         ).status_code
         == 200
     )
-    account = _create_account(client)
-    assert client.post("/api/v1/auth/logout").status_code == 200
+    account = _create_account(client, headers=_csrf_headers(client))
+    assert client.post("/api/v1/auth/logout", headers=_csrf_headers(client)).status_code == 200
 
     # User B
     second_email = "second-user@example.com"
@@ -153,6 +162,7 @@ def test_transaction_cannot_use_other_users_account(client: TestClient) -> None:
             "direction": "OUT",
             "occurred_at": datetime.now(UTC).isoformat(),
         },
+        headers=_csrf_headers(client),
     )
     assert response.status_code == 404
     assert response.json()["code"] == "account_not_found"

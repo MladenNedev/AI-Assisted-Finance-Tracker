@@ -42,6 +42,15 @@ class CacheService:
         self._client = None
         logger.info("Redis cache disconnected")
 
+    async def is_available(self) -> bool:
+        if self._client is None:
+            return False
+        try:
+            return bool(await self._client.ping())
+        except Exception:
+            logger.warning("Failed redis ping", exc_info=True)
+            return False
+
     async def get_json(self, key: str) -> Any | None:
         if self._client is None:
             return None
@@ -67,6 +76,24 @@ class CacheService:
         except Exception:
             logger.warning("Failed cache write for key=%s", key, exc_info=True)
             return False
+
+    async def increment_with_ttl(self, key: str, *, ttl_seconds: int) -> tuple[int, int] | None:
+        if self._client is None:
+            return None
+        try:
+            count = int(await self._client.incr(key))
+            if count == 1:
+                await self._client.expire(key, ttl_seconds)
+                return count, ttl_seconds
+
+            ttl = int(await self._client.ttl(key))
+            if ttl < 0:
+                await self._client.expire(key, ttl_seconds)
+                ttl = ttl_seconds
+            return count, ttl
+        except Exception:
+            logger.warning("Failed increment for key=%s", key, exc_info=True)
+            return None
 
     async def get_user_report_version(self, user_id: UUID) -> int:
         if self._client is None:
