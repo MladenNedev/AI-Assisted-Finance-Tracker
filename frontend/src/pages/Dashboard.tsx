@@ -28,6 +28,7 @@ import {
 import { ApiError, apiFetch } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import type {
+  BudgetProgressResponse,
   CashflowTrendResponse,
   CategoryBreakdownResponse,
   DashboardSummaryResponse,
@@ -51,6 +52,7 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
   const [cashflow, setCashflow] = useState<CashflowTrendResponse | null>(null);
   const [categories, setCategories] = useState<CategoryBreakdownResponse | null>(null);
+  const [budgetProgress, setBudgetProgress] = useState<BudgetProgressResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -211,6 +213,40 @@ export default function Dashboard() {
 
           <Card withBorder radius="md" p="lg">
             <Group justify="space-between">
+              <Title order={4}>Budget Overview</Title>
+              <Button variant="subtle" size="xs" onClick={() => navigate("/budgets")}>
+                View all budgets
+              </Button>
+            </Group>
+            {!budgetProgress || budgetProgress.items.length === 0 ? (
+              <Text c="dimmed" size="sm" mt="sm">
+                No budgets configured for this month.
+              </Text>
+            ) : (
+              <Stack gap="sm" mt="sm">
+                {budgetProgress.items.slice(0, 3).map((item) => (
+                  <div key={item.budget_id}>
+                    <Group justify="space-between" mb={6}>
+                      <Text size="sm" fw={600}>
+                        {item.category_name}
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        ${item.spent_amount} / ${item.limit_amount}
+                      </Text>
+                    </Group>
+                    <Progress
+                      value={Math.min(item.percentage_used, 100)}
+                      color={budgetStatusColor(item.status)}
+                      size="md"
+                    />
+                  </div>
+                ))}
+              </Stack>
+            )}
+          </Card>
+
+          <Card withBorder radius="md" p="lg">
+            <Group justify="space-between">
               <Title order={4}>Account Balances</Title>
               <Text size="sm" c="dimmed">
                 {summary.account_count} active accounts
@@ -247,7 +283,7 @@ export default function Dashboard() {
       setSummary(dashboard);
 
       const granularity: ReportGranularity = selectedPeriod === "year" ? "month" : "day";
-      const [cashflowData, categoryData] = await Promise.all([
+      const [cashflowData, categoryData, budgetProgressData] = await Promise.all([
         apiFetch<CashflowTrendResponse>(
           `/reporting/cashflow?from_date=${encodeURIComponent(
             dashboard.from_date,
@@ -258,9 +294,13 @@ export default function Dashboard() {
             dashboard.from_date,
           )}&to_date=${encodeURIComponent(dashboard.to_date)}&breakdown_type=expense&limit=8`,
         ),
+        apiFetch<BudgetProgressResponse>(
+          `/budgets/progress?month=${encodeURIComponent(dashboard.to_date.slice(0, 7))}`,
+        ),
       ]);
       setCashflow(cashflowData);
       setCategories(categoryData);
+      setBudgetProgress(budgetProgressData);
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     } finally {
@@ -307,6 +347,16 @@ function formatPeriodLabel(value: string, granularity: ReportGranularity): strin
     return new Intl.DateTimeFormat("en-US", { month: "short", year: "2-digit" }).format(date);
   }
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+}
+
+function budgetStatusColor(status: "on_track" | "warning" | "exceeded"): string {
+  if (status === "exceeded") {
+    return "red";
+  }
+  if (status === "warning") {
+    return "yellow";
+  }
+  return "green";
 }
 
 function getErrorMessage(error: unknown): string {

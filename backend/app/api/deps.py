@@ -9,6 +9,7 @@ from app.core.exceptions import AuthenticationError
 from app.persistence.models import User
 from app.persistence.repositories import (
     AccountRepository,
+    BudgetRepository,
     CategoryRepository,
     ReportingRepository,
     SessionRepository,
@@ -18,6 +19,7 @@ from app.persistence.repositories import (
 from app.persistence.session import AsyncSessionLocal
 from app.services.account_service import AccountService
 from app.services.auth_service import AuthService
+from app.services.budget_service import BudgetService
 from app.services.category_service import CategoryService
 from app.services.reporting_service import ReportingService
 from app.services.transaction_service import TransactionService
@@ -56,6 +58,12 @@ def get_category_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> CategoryRepository:
     return CategoryRepository(session)
+
+
+def get_budget_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> BudgetRepository:
+    return BudgetRepository(session)
 
 
 def get_reporting_repository(
@@ -102,6 +110,18 @@ def get_category_service(
     category_repository: Annotated[CategoryRepository, Depends(get_category_repository)],
 ) -> CategoryService:
     return CategoryService(session=session, category_repository=category_repository)
+
+
+def get_budget_service(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    budget_repository: Annotated[BudgetRepository, Depends(get_budget_repository)],
+    category_repository: Annotated[CategoryRepository, Depends(get_category_repository)],
+) -> BudgetService:
+    return BudgetService(
+        session=session,
+        budget_repository=budget_repository,
+        category_repository=category_repository,
+    )
 
 
 def get_reporting_service(

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -6,7 +6,7 @@ from sqlalchemy import Select, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.money import TransactionDirection
-from app.persistence.models import Account, AuthSession, Category, Transaction, User
+from app.persistence.models import Account, AuthSession, Budget, Category, Transaction, User
 
 
 class UserRepository:
@@ -347,6 +347,158 @@ class CategoryRepository:
         await self.session.delete(category)
         await self.session.flush()
         return True
+
+
+class BudgetRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def create(
+        self,
+        user_id: UUID,
+        category_id: UUID,
+        month_start: date,
+        limit_amount: Decimal,
+    ) -> Budget:
+        budget = Budget(
+            user_id=user_id,
+            category_id=category_id,
+            month_start=month_start,
+            limit_amount=limit_amount,
+        )
+        self.session.add(budget)
+        await self.session.flush()
+        return budget
+
+    async def get_by_id(self, budget_id: UUID, user_id: UUID) -> Budget | None:
+        stmt = select(Budget).where(Budget.id == budget_id, Budget.user_id == user_id)
+        return await self.session.scalar(stmt)
+
+    async def get_by_category_month(
+        self,
+        user_id: UUID,
+        category_id: UUID,
+        month_start: date,
+    ) -> Budget | None:
+        stmt = select(Budget).where(
+            Budget.user_id == user_id,
+            Budget.category_id == category_id,
+            Budget.month_start == month_start,
+        )
+        return await self.session.scalar(stmt)
+
+    async def list_by_month(
+        self,
+        user_id: UUID,
+        month_start: date,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Budget]:
+        stmt = (
+            select(Budget)
+            .join(Category, Category.id == Budget.category_id)
+            .where(Budget.user_id == user_id, Budget.month_start == month_start)
+            .order_by(Category.name.asc(), Budget.created_at.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        rows = await self.session.scalars(stmt)
+        return list(rows.all())
+
+    async def list_all_by_month(self, user_id: UUID, month_start: date) -> list[Budget]:
+        stmt = (
+            select(Budget)
+            .join(Category, Category.id == Budget.category_id)
+            .where(Budget.user_id == user_id, Budget.month_start == month_start)
+            .order_by(Category.name.asc(), Budget.created_at.asc())
+        )
+        rows = await self.session.scalars(stmt)
+        return list(rows.all())
+
+    async def count_by_month(self, user_id: UUID, month_start: date) -> int:
+        stmt = select(func.count(Budget.id)).where(
+            Budget.user_id == user_id, Budget.month_start == month_start
+        )
+        return int(await self.session.scalar(stmt) or 0)
+
+    async def update_limit(
+        self,
+        budget_id: UUID,
+        user_id: UUID,
+        limit_amount: Decimal,
+    ) -> Budget | None:
+        budget = await self.get_by_id(budget_id, user_id)
+        if budget is None:
+            return None
+        budget.limit_amount = limit_amount
+        await self.session.flush()
+        return budget
+
+    async def delete(self, budget_id: UUID, user_id: UUID) -> bool:
+        budget = await self.get_by_id(budget_id, user_id)
+        if budget is None:
+            return False
+        await self.session.delete(budget)
+        await self.session.flush()
+        return True
+
+    async def list_month_progress(
+        self,
+        user_id: UUID,
+        month_start: date,
+        occurred_from: datetime,
+        occurred_to: datetime,
+    ) -> list[dict[str, object]]:
+        spent_subquery = (
+            select(
+                Transaction.category_id.label("category_id"),
+                func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("spent_amount"),
+            )
+            .select_from(Transaction)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(
+                Account.user_id == user_id,
+                Transaction.category_id.is_not(None),
+                Transaction.direction == TransactionDirection.OUT.value,
+                Transaction.occurred_at >= occurred_from,
+                Transaction.occurred_at < occurred_to,
+            )
+            .group_by(Transaction.category_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                Budget.id.label("budget_id"),
+                Budget.category_id.label("category_id"),
+                Budget.month_start.label("month_start"),
+                Budget.limit_amount.label("limit_amount"),
+                Category.name.label("category_name"),
+                Category.color.label("category_color"),
+                Category.icon.label("category_icon"),
+                func.coalesce(spent_subquery.c.spent_amount, Decimal("0")).label("spent_amount"),
+            )
+            .select_from(Budget)
+            .join(Category, Category.id == Budget.category_id)
+            .outerjoin(spent_subquery, spent_subquery.c.category_id == Budget.category_id)
+            .where(Budget.user_id == user_id, Budget.month_start == month_start)
+            .order_by(Category.name.asc())
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [
+            {
+                "budget_id": row.budget_id,
+                "category_id": row.category_id,
+                "month_start": row.month_start,
+                "limit_amount": Decimal(row.limit_amount),
+                "category_name": row.category_name,
+                "category_color": row.category_color,
+                "category_icon": row.category_icon,
+                "spent_amount": Decimal(row.spent_amount or 0),
+            }
+            for row in rows
+        ]
 
 
 class ReportingRepository:

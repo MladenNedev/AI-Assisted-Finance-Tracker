@@ -164,3 +164,51 @@ export interface CategoryBreakdownResponse {
   total: string;
   categories: CategoryBreakdownItem[];
 }
+
+export type BudgetStatus = "on_track" | "warning" | "exceeded";
+
+export interface BudgetResponse {
+  id: string;
+  user_id: string;
+  category_id: string;
+  month: string;
+  limit_amount: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BudgetProgressItem {
+  budget_id: string;
+  category_id: string;
+  category_name: string;
+  category_color: string | null;
+  category_icon: string | null;
+  month: string;
+  limit_amount: string;
+  spent_amount: string;
+  remaining_amount: string;
+  percentage_used: number;
+  status: BudgetStatus;
+  days_elapsed: number;
+  days_remaining: number;
+  daily_average: string;
+  projected_spend: string;
+  projected_diff: string;
+}
+
+export interface BudgetProgressResponse {
+  month: string;
+  items: BudgetProgressItem[];
+}
+
+export interface CreateBudgetRequest {
+  category_id: string;
+  month: string;
+  limit_amount: string;
+}
+
+export interface CopyBudgetsResponse {
+  source_month: string;
+  target_month: string;
+  created_count: number;
+}
