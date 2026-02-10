@@ -41,6 +41,12 @@ class Settings(BaseSettings):
         default=False, alias="RATE_LIMIT_REPORTING_FAIL_CLOSED"
     )
     frontend_dist_dir: str | None = Field(default=None, alias="FRONTEND_DIST_DIR")
+    sentry_dsn: str | None = Field(default=None, alias="SENTRY_DSN")
+    sentry_environment: str = Field(default="development", alias="SENTRY_ENVIRONMENT")
+    sentry_traces_sample_rate: float = Field(default=0.1, alias="SENTRY_TRACES_SAMPLE_RATE")
+    sentry_dsn: str | None = Field(default=None, alias="SENTRY_DSN")
+    sentry_environment: str = Field(default="development", alias="SENTRY_ENVIRONMENT")
+    sentry_traces_sample_rate: float = Field(default=0.1, alias="SENTRY_TRACES_SAMPLE_RATE")
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> Self:
