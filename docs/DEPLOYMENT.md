@@ -10,6 +10,7 @@ Copy `backend/.env.production.example` and fill values for:
 - `DATABASE_URL`
 - `REDIS_URL`
 - `CORS_ORIGINS`
+- `SENTRY_DSN` (optional)
 
 Frontend should use `VITE_API_BASE_URL=/api/v1` for same-origin API calls.
 
