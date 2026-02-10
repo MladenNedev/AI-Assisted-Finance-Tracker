@@ -6,9 +6,13 @@ import {
   Grid,
   Group,
   Loader,
+  Modal,
+  NumberInput,
+  Progress,
   Select,
   Stack,
   Text,
+  TextInput,
   Title,
 } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
@@ -30,10 +34,14 @@ import { useAuth } from "../contexts/AuthContext";
 import type {
   BudgetProgressResponse,
   CashflowTrendResponse,
+  CreateTransactionRequest,
   CategoryBreakdownResponse,
   DashboardSummaryResponse,
+  PaginatedResponse,
   ReportGranularity,
   ReportPeriod,
+  AccountResponse,
+  CategoryResponse,
 } from "../api/types";
 
 const PERIOD_OPTIONS: Array<{ value: ReportPeriod; label: string }> = [
@@ -55,6 +63,20 @@ export default function Dashboard() {
   const [budgetProgress, setBudgetProgress] = useState<BudgetProgressResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickSubmitting, setQuickSubmitting] = useState(false);
+  const [quickError, setQuickError] = useState<string | null>(null);
+  const [quickAccounts, setQuickAccounts] = useState<AccountResponse[]>([]);
+  const [quickCategories, setQuickCategories] = useState<CategoryResponse[]>([]);
+  const [quickForm, setQuickForm] = useState({
+    account_id: "",
+    amount: 0 as number | "",
+    direction: "OUT" as "IN" | "OUT",
+    category_id: "",
+    merchant: "",
+    note: "",
+    occurred_at: toDateTimeLocal(new Date().toISOString()),
+  });
 
   useEffect(() => {
     void loadDashboard(period);
@@ -90,6 +112,26 @@ export default function Dashboard() {
     }));
   }, [categories]);
 
+  const quickCategoryOptions = useMemo(
+    () =>
+      quickCategories
+        .filter((category) => category.is_income === (quickForm.direction === "IN"))
+        .map((category) => ({
+          value: category.id,
+          label: category.icon ? `${category.icon} ${category.name}` : category.name,
+        })),
+    [quickCategories, quickForm.direction],
+  );
+
+  const quickAccountOptions = useMemo(
+    () =>
+      quickAccounts.map((account) => ({
+        value: account.id,
+        label: `${account.name} (${account.currency} ${account.current_balance})`,
+      })),
+    [quickAccounts],
+  );
+
   return (
     <Stack mt="md" gap="md">
       <Group justify="space-between" align="center">
@@ -101,6 +143,9 @@ export default function Dashboard() {
             data={PERIOD_OPTIONS}
             w={160}
           />
+          <Button variant="outline" onClick={openQuickAdd}>
+            Quick add
+          </Button>
           <Button variant="light" onClick={onLogout}>
             Logout
           </Button>
@@ -213,12 +258,16 @@ export default function Dashboard() {
 
           <Card withBorder radius="md" p="lg">
             <Group justify="space-between">
-              <Title order={4}>Budget Overview</Title>
+              <Title order={4}>Budget Overview (Current Month)</Title>
               <Button variant="subtle" size="xs" onClick={() => navigate("/budgets")}>
                 View all budgets
               </Button>
             </Group>
-            {!budgetProgress || budgetProgress.items.length === 0 ? (
+            {budgetProgress === null ? (
+              <Text c="dimmed" size="sm" mt="sm">
+                Budget overview unavailable.
+              </Text>
+            ) : budgetProgress.items.length === 0 ? (
               <Text c="dimmed" size="sm" mt="sm">
                 No budgets configured for this month.
               </Text>
@@ -270,6 +319,96 @@ export default function Dashboard() {
           </Card>
         </>
       ) : null}
+
+      <Modal
+        opened={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        title="Quick add transaction"
+        centered
+        size="lg"
+      >
+        <Stack>
+          {quickError ? (
+            <Alert color="red" title="Unable to add transaction">
+              {quickError}
+            </Alert>
+          ) : null}
+          <Select
+            label="Account"
+            data={quickAccountOptions}
+            value={quickForm.account_id || null}
+            onChange={(value) =>
+              setQuickForm((current) => ({ ...current, account_id: value ?? "" }))
+            }
+            searchable
+            required
+          />
+          <Group grow>
+            <NumberInput
+              label="Amount"
+              value={quickForm.amount}
+              onChange={(value) => setQuickForm((current) => ({ ...current, amount: value }))}
+              min={0}
+              decimalScale={2}
+              fixedDecimalScale
+              prefix="$"
+              required
+            />
+            <Select
+              label="Direction"
+              data={[
+                { value: "OUT", label: "Expense (OUT)" },
+                { value: "IN", label: "Income (IN)" },
+              ]}
+              value={quickForm.direction}
+              onChange={(value) =>
+                setQuickForm((current) => ({
+                  ...current,
+                  direction: (value as "IN" | "OUT" | null) ?? "OUT",
+                  category_id: "",
+                }))
+              }
+            />
+          </Group>
+          <Select
+            label="Category (optional)"
+            placeholder="Uncategorized"
+            data={quickCategoryOptions}
+            value={quickForm.category_id || null}
+            onChange={(value) =>
+              setQuickForm((current) => ({ ...current, category_id: value ?? "" }))
+            }
+            clearable
+            searchable
+          />
+          <TextInput
+            label="Merchant / Description"
+            value={quickForm.merchant}
+            onChange={(event) =>
+              setQuickForm((current) => ({ ...current, merchant: event.currentTarget.value }))
+            }
+          />
+          <TextInput
+            label="Note"
+            value={quickForm.note}
+            onChange={(event) =>
+              setQuickForm((current) => ({ ...current, note: event.currentTarget.value }))
+            }
+          />
+          <TextInput
+            label="Occurred at"
+            type="datetime-local"
+            value={quickForm.occurred_at}
+            onChange={(event) =>
+              setQuickForm((current) => ({ ...current, occurred_at: event.currentTarget.value }))
+            }
+            required
+          />
+          <Button onClick={submitQuickAdd} loading={quickSubmitting}>
+            Add transaction
+          </Button>
+        </Stack>
+      </Modal>
     </Stack>
   );
 
@@ -283,7 +422,7 @@ export default function Dashboard() {
       setSummary(dashboard);
 
       const granularity: ReportGranularity = selectedPeriod === "year" ? "month" : "day";
-      const [cashflowData, categoryData, budgetProgressData] = await Promise.all([
+      const [cashflowData, categoryData] = await Promise.all([
         apiFetch<CashflowTrendResponse>(
           `/reporting/cashflow?from_date=${encodeURIComponent(
             dashboard.from_date,
@@ -294,17 +433,71 @@ export default function Dashboard() {
             dashboard.from_date,
           )}&to_date=${encodeURIComponent(dashboard.to_date)}&breakdown_type=expense&limit=8`,
         ),
-        apiFetch<BudgetProgressResponse>(
-          `/budgets/progress?month=${encodeURIComponent(dashboard.to_date.slice(0, 7))}`,
-        ),
       ]);
       setCashflow(cashflowData);
       setCategories(categoryData);
-      setBudgetProgress(budgetProgressData);
+
+      try {
+        const budgetProgressData = await apiFetch<BudgetProgressResponse>(
+          `/budgets/progress?month=${encodeURIComponent(currentMonth())}`,
+        );
+        setBudgetProgress(budgetProgressData);
+      } catch {
+        setBudgetProgress(null);
+      }
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function openQuickAdd() {
+    setQuickError(null);
+    setQuickOpen(true);
+    if (!quickAccounts.length || !quickCategories.length) {
+      try {
+        const [accountResponse, categoryResponse] = await Promise.all([
+          apiFetch<PaginatedResponse<AccountResponse>>("/accounts?limit=500&offset=0"),
+          apiFetch<PaginatedResponse<CategoryResponse>>("/categories?limit=500&offset=0"),
+        ]);
+        setQuickAccounts(accountResponse.items);
+        setQuickCategories(categoryResponse.items);
+        setQuickForm((current) => ({
+          ...current,
+          account_id: accountResponse.items[0]?.id ?? "",
+        }));
+      } catch (requestError) {
+        setQuickError(getErrorMessage(requestError));
+      }
+    }
+  }
+
+  async function submitQuickAdd() {
+    if (!quickForm.account_id || quickForm.amount === "" || quickForm.amount <= 0) {
+      setQuickError("Account and amount are required");
+      return;
+    }
+
+    setQuickSubmitting(true);
+    setQuickError(null);
+    try {
+      const payload: CreateTransactionRequest = {
+        account_id: quickForm.account_id,
+        amount: Number(quickForm.amount).toFixed(2),
+        direction: quickForm.direction,
+        category_id: quickForm.category_id || null,
+        merchant: normalizeString(quickForm.merchant) ?? undefined,
+        note: normalizeString(quickForm.note) ?? undefined,
+        occurred_at: toIsoString(quickForm.occurred_at),
+      };
+      await apiFetch("/transactions", { method: "POST", body: JSON.stringify(payload) });
+      setQuickOpen(false);
+      await loadDashboard(period);
+    } catch (requestError) {
+      setQuickError(getErrorMessage(requestError));
+    } finally {
+      setQuickSubmitting(false);
     }
   }
 }
@@ -336,6 +529,33 @@ function toNumber(value: string): number {
     return 0;
   }
   return parsed;
+}
+
+function normalizeString(value: string): string | null {
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+  return normalized;
+}
+
+function toDateTimeLocal(isoDateString: string): string {
+  const date = new Date(isoDateString);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  const localDate = new Date(date.getTime() - offsetMs);
+  return localDate.toISOString().slice(0, 16);
+}
+
+function toIsoString(dateTimeLocal: string): string {
+  return new Date(dateTimeLocal).toISOString();
+}
+
+function currentMonth(): string {
+  const now = new Date();
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 function formatPeriodLabel(value: string, granularity: ReportGranularity): string {

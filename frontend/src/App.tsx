@@ -3,9 +3,12 @@ import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Accounts from "./pages/Accounts";
+import AccountDetails from "./pages/AccountDetails";
 import Budgets from "./pages/Budgets";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import Categories from "./pages/Categories";
+import Transactions from "./pages/Transactions";
 
 function AppLayout() {
   const { user } = useAuth();
@@ -34,6 +37,22 @@ function AppLayout() {
                   variant={location.pathname.startsWith("/accounts") ? "light" : "subtle"}
                 >
                   Accounts
+                </Button>
+                <Button
+                  component={Link}
+                  to="/transactions"
+                  size="xs"
+                  variant={location.pathname.startsWith("/transactions") ? "light" : "subtle"}
+                >
+                  Transactions
+                </Button>
+                <Button
+                  component={Link}
+                  to="/categories"
+                  size="xs"
+                  variant={location.pathname.startsWith("/categories") ? "light" : "subtle"}
+                >
+                  Categories
                 </Button>
                 <Button
                   component={Link}
@@ -71,10 +90,34 @@ function AppLayout() {
             }
           />
           <Route
+            path="/accounts/:accountId"
+            element={
+              <ProtectedRoute>
+                <AccountDetails />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/budgets"
             element={
               <ProtectedRoute>
                 <Budgets />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/transactions"
+            element={
+              <ProtectedRoute>
+                <Transactions />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/categories"
+            element={
+              <ProtectedRoute>
+                <Categories />
               </ProtectedRoute>
             }
           />
