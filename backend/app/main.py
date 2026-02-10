@@ -132,7 +132,7 @@ def _configure_frontend(app: FastAPI, settings: object) -> None:
         if full_path and candidate.exists() and candidate.is_file():
             return FileResponse(candidate)
 
-    return FileResponse(dist_dir / "index.html")
+        return FileResponse(dist_dir / "index.html")
 
 
 def _configure_sentry(settings: object) -> None:
