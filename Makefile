@@ -1,4 +1,5 @@
 DC = docker compose --env-file .env -f infra/docker-compose.yml
+DC_RUN = $(DC) run --rm --build
 
 .PHONY: up down migrate test format lint
 
@@ -9,18 +10,18 @@ up:
 	$(MAKE) migrate
 
 migrate:
-	$(DC) run --rm backend alembic upgrade head
+	$(DC_RUN) backend alembic upgrade head
 
 down:
 	$(DC) down -v
 
 test:
-	$(DC) run --rm backend pytest
+	$(DC_RUN) backend pytest
 
 format:
-	$(DC) run --rm backend ruff check --fix app tests
-	$(DC) run --rm backend black app tests
+	$(DC_RUN) backend ruff check --fix app tests
+	$(DC_RUN) backend black app tests
 
 lint:
-	$(DC) run --rm backend ruff check app tests
-	$(DC) run --rm backend black --check app tests
+	$(DC_RUN) backend ruff check app tests
+	$(DC_RUN) backend black --check app tests

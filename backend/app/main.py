@@ -5,11 +5,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 
+import sentry_sdk
 from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -35,20 +38,24 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         request_id = request.headers.get("X-Request-ID") or uuid4().hex
         request.state.request_id = request_id
+        if sentry_sdk.Hub.current.client is not None:
+            sentry_sdk.set_tag("request_id", request_id)
         start = time.perf_counter()
 
         response = await call_next(request)
 
         duration_ms = int((time.perf_counter() - start) * 1000)
-        user_id = getattr(request.state, "user_id", None)
         logger.info(
-            "request_completed request_id=%s method=%s path=%s status=%s duration_ms=%s user_id=%s",
-            request_id,
-            request.method,
-            request.url.path,
-            response.status_code,
-            duration_ms,
-            user_id,
+            "request_completed",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+                "user_id": getattr(request.state, "user_id", None),
+                "client_ip": request.client.host if request.client else None,
+            },
         )
 
         response.headers["X-Request-ID"] = request_id
@@ -125,12 +132,26 @@ def _configure_frontend(app: FastAPI, settings: object) -> None:
         if full_path and candidate.exists() and candidate.is_file():
             return FileResponse(candidate)
 
-        return FileResponse(dist_dir / "index.html")
+    return FileResponse(dist_dir / "index.html")
+
+
+def _configure_sentry(settings: object) -> None:
+    dsn = getattr(settings, "sentry_dsn", None)
+    if not dsn:
+        return
+
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=getattr(settings, "sentry_environment", "development"),
+        traces_sample_rate=getattr(settings, "sentry_traces_sample_rate", 0.1),
+        integrations=[FastApiIntegration(), SqlalchemyIntegration()],
+    )
 
 
 def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
+    _configure_sentry(settings)
 
     app = FastAPI(title="AI-Assisted Finance Tracker", version="0.1.0", lifespan=lifespan)
 
