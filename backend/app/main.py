@@ -2,11 +2,14 @@ import logging
 import secrets
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -99,6 +102,32 @@ async def lifespan(_: FastAPI):
         await cache.disconnect()
 
 
+def _configure_frontend(app: FastAPI, settings: object) -> None:
+    dist_dir_value = getattr(settings, "frontend_dist_dir", None)
+    if not dist_dir_value:
+        return
+
+    dist_dir = Path(dist_dir_value)
+    if not dist_dir.exists():
+        logger.warning("Frontend dist directory not found: %s", dist_dir)
+        return
+
+    assets_dir = dist_dir / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str) -> FileResponse:
+        if full_path.startswith("api/") or full_path == "api":
+            raise HTTPException(status_code=404, detail="Not found")
+
+        candidate = dist_dir / full_path
+        if full_path and candidate.exists() and candidate.is_file():
+            return FileResponse(candidate)
+
+        return FileResponse(dist_dir / "index.html")
+
+
 def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
@@ -118,6 +147,7 @@ def create_app() -> FastAPI:
 
     add_exception_handlers(app)
     app.include_router(api_router, prefix="/api/v1")
+    _configure_frontend(app, settings)
     return app
 
 
