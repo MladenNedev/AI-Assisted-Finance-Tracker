@@ -45,9 +45,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_production_settings(self) -> Self:
         if self.database_url.startswith("postgres://"):
-            self.database_url = self.database_url.replace(
-                "postgres://", "postgresql+asyncpg://", 1
-            )
+            self.database_url = self.database_url.replace("postgres://", "postgresql+asyncpg://", 1)
         elif self.database_url.startswith("postgresql://") and "+asyncpg" not in self.database_url:
             self.database_url = self.database_url.replace(
                 "postgresql://", "postgresql+asyncpg://", 1
