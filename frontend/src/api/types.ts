@@ -62,6 +62,20 @@ export interface CategoryResponse {
   updated_at: string;
 }
 
+export interface CreateCategoryRequest {
+  name: string;
+  is_income: boolean;
+  color?: string | null;
+  icon?: string | null;
+}
+
+export interface UpdateCategoryRequest {
+  name?: string;
+  is_income?: boolean;
+  color?: string | null;
+  icon?: string | null;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
@@ -106,8 +120,18 @@ export interface CreateTransactionRequest {
   amount: string;
   direction: TransactionDirection;
   occurred_at: string;
+  category_id?: string | null;
   merchant?: string;
   note?: string;
+}
+
+export interface UpdateTransactionRequest {
+  category_id?: string | null;
+  amount?: string;
+  direction?: TransactionDirection;
+  occurred_at?: string;
+  merchant?: string | null;
+  note?: string | null;
 }
 
 export type ReportPeriod = "day" | "week" | "month" | "year";
@@ -204,6 +228,10 @@ export interface BudgetProgressResponse {
 export interface CreateBudgetRequest {
   category_id: string;
   month: string;
+  limit_amount: string;
+}
+
+export interface UpdateBudgetRequest {
   limit_amount: string;
 }
 
