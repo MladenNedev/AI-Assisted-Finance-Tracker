@@ -11,6 +11,7 @@ import {
   TextInput,
   Title
 } from "@mantine/core";
+import { Link } from "react-router-dom";
 import { ApiError, apiFetch } from "../api/client";
 import type {
   AccountResponse,
@@ -107,6 +108,7 @@ export default function Accounts() {
             <Table.Th>Currency</Table.Th>
             <Table.Th ta="right">Opening</Table.Th>
             <Table.Th ta="right">Current</Table.Th>
+            <Table.Th ta="right">Actions</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -117,11 +119,21 @@ export default function Accounts() {
               <Table.Td>{account.currency}</Table.Td>
               <Table.Td ta="right">{account.opening_balance}</Table.Td>
               <Table.Td ta="right">{account.current_balance}</Table.Td>
+              <Table.Td ta="right">
+                <Button
+                  component={Link}
+                  to={`/accounts/${account.id}`}
+                  size="xs"
+                  variant="subtle"
+                >
+                  View
+                </Button>
+              </Table.Td>
             </Table.Tr>
           ))}
           {!loading && accounts.length === 0 ? (
             <Table.Tr>
-              <Table.Td colSpan={5}>
+              <Table.Td colSpan={6}>
                 <Text c="dimmed" ta="center">
                   No accounts yet.
                 </Text>
