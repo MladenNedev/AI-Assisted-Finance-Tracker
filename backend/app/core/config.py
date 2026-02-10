@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     rate_limit_reporting_fail_closed: bool = Field(
         default=False, alias="RATE_LIMIT_REPORTING_FAIL_CLOSED"
     )
+    frontend_dist_dir: str | None = Field(default=None, alias="FRONTEND_DIST_DIR")
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> Self:
