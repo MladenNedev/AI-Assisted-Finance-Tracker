@@ -44,6 +44,7 @@ async def list_transactions(
     category_id: Annotated[UUID | None, Query()] = None,
     occurred_from: Annotated[datetime | None, Query()] = None,
     occurred_to: Annotated[datetime | None, Query()] = None,
+    search: Annotated[str | None, Query(max_length=200)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TransactionListResponse:
@@ -53,6 +54,7 @@ async def list_transactions(
         category_id=category_id,
         occurred_from=occurred_from,
         occurred_to=occurred_to,
+        search=search,
         limit=limit,
         offset=offset,
     )
@@ -62,6 +64,33 @@ async def list_transactions(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/export", response_class=Response)
+async def export_transactions(
+    current_user: Annotated[User, Depends(get_current_user)],
+    transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
+    account_id: Annotated[UUID | None, Query()] = None,
+    category_id: Annotated[UUID | None, Query()] = None,
+    occurred_from: Annotated[datetime | None, Query()] = None,
+    occurred_to: Annotated[datetime | None, Query()] = None,
+    search: Annotated[str | None, Query(max_length=200)] = None,
+    limit: Annotated[int, Query(ge=1, le=5000)] = 1000,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Response:
+    csv_payload = await transaction_service.export_transactions_csv(
+        user_id=current_user.id,
+        account_id=account_id,
+        category_id=category_id,
+        occurred_from=occurred_from,
+        occurred_to=occurred_to,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+    filename = f"transactions_{current_user.id}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return Response(content=csv_payload, media_type="text/csv", headers=headers)
 
 
 @router.get("/{transaction_id}", response_model=TransactionResponse)

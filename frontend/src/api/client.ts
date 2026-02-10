@@ -12,7 +12,7 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL =
+export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 const CSRF_COOKIE_NAME = "finance_csrf";
 const CSRF_HEADER_NAME = "X-CSRF-Token";

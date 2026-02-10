@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Select, case, func, select
+from sqlalchemy import Select, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.money import TransactionDirection
@@ -198,6 +198,7 @@ class TransactionRepository:
         category_id: UUID | None = None,
         occurred_from: datetime | None = None,
         occurred_to: datetime | None = None,
+        search: str | None = None,
     ) -> Select[tuple[Transaction]]:
         stmt = (
             select(Transaction)
@@ -212,6 +213,14 @@ class TransactionRepository:
             stmt = stmt.where(Transaction.occurred_at >= occurred_from)
         if occurred_to is not None:
             stmt = stmt.where(Transaction.occurred_at <= occurred_to)
+        if search:
+            pattern = f"%{search.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    Transaction.merchant.ilike(pattern),
+                    Transaction.note.ilike(pattern),
+                )
+            )
         return stmt
 
     async def list_by_user(
@@ -222,6 +231,7 @@ class TransactionRepository:
         category_id: UUID | None = None,
         occurred_from: datetime | None = None,
         occurred_to: datetime | None = None,
+        search: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Transaction]:
@@ -231,6 +241,7 @@ class TransactionRepository:
             category_id=category_id,
             occurred_from=occurred_from,
             occurred_to=occurred_to,
+            search=search,
         )
         stmt = stmt.order_by(Transaction.occurred_at.desc(), Transaction.created_at.desc())
         stmt = stmt.limit(limit).offset(offset)
@@ -245,6 +256,7 @@ class TransactionRepository:
         category_id: UUID | None = None,
         occurred_from: datetime | None = None,
         occurred_to: datetime | None = None,
+        search: str | None = None,
     ) -> int:
         base_stmt = self._build_list_stmt(
             user_id=user_id,
@@ -252,6 +264,7 @@ class TransactionRepository:
             category_id=category_id,
             occurred_from=occurred_from,
             occurred_to=occurred_to,
+            search=search,
         )
         count_stmt = select(func.count()).select_from(base_stmt.subquery())
         return int(await self.session.scalar(count_stmt) or 0)

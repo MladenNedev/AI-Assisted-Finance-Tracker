@@ -15,7 +15,7 @@ import {
   Title,
 } from "@mantine/core";
 
-import { ApiError, apiFetch } from "../api/client";
+import { API_BASE_URL, ApiError, apiFetch } from "../api/client";
 import type {
   AccountResponse,
   CategoryResponse,
@@ -43,6 +43,7 @@ type TransactionFilters = {
   category_id: string;
   occurred_from: string;
   occurred_to: string;
+  search: string;
 };
 
 const INITIAL_FILTERS: TransactionFilters = {
@@ -50,6 +51,7 @@ const INITIAL_FILTERS: TransactionFilters = {
   category_id: "",
   occurred_from: "",
   occurred_to: "",
+  search: "",
 };
 
 export default function Transactions() {
@@ -220,6 +222,9 @@ export default function Transactions() {
           <Text c="dimmed" size="sm">
             {total} total
           </Text>
+          <Button variant="light" onClick={() => void onExportCsv()}>
+            Export CSV
+          </Button>
           <Button onClick={onOpenCreate} disabled={!accounts.length}>
             Add transaction
           </Button>
@@ -233,6 +238,15 @@ export default function Transactions() {
       ) : null}
 
       <Group align="end" wrap="wrap">
+        <TextInput
+          label="Search"
+          placeholder="Merchant or note"
+          value={filterInputs.search}
+          onChange={(event) =>
+            setFilterInputs((current) => ({ ...current, search: event.currentTarget.value }))
+          }
+          w={240}
+        />
         <Select
           label="Account"
           placeholder="All accounts"
@@ -487,6 +501,9 @@ export default function Transactions() {
       if (targetFilters.occurred_to) {
         params.set("occurred_to", `${targetFilters.occurred_to}T23:59:59Z`);
       }
+      if (targetFilters.search.trim()) {
+        params.set("search", targetFilters.search.trim());
+      }
 
       const response = await apiFetch<PaginatedResponse<TransactionResponse>>(
         `/transactions?${params.toString()}`,
@@ -498,6 +515,43 @@ export default function Transactions() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function onExportCsv() {
+    const params = new URLSearchParams();
+    if (filters.account_id) {
+      params.set("account_id", filters.account_id);
+    }
+    if (filters.category_id) {
+      params.set("category_id", filters.category_id);
+    }
+    if (filters.occurred_from) {
+      params.set("occurred_from", `${filters.occurred_from}T00:00:00Z`);
+    }
+    if (filters.occurred_to) {
+      params.set("occurred_to", `${filters.occurred_to}T23:59:59Z`);
+    }
+    if (filters.search.trim()) {
+      params.set("search", filters.search.trim());
+    }
+
+    const response = await fetch(`${API_BASE_URL}/transactions/export?${params.toString()}`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      setError(`Export failed (${response.status})`);
+      return;
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "transactions.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   }
 }
 

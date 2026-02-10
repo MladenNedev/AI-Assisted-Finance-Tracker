@@ -223,6 +223,59 @@ def test_transactions_filter_by_category(authenticated_client: TestClient) -> No
     assert payload["items"][0]["category_id"] == groceries["id"]
 
 
+def test_transactions_search_by_merchant(authenticated_client: TestClient) -> None:
+    account = _create_account(authenticated_client)
+
+    response_one = authenticated_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account["id"],
+            "amount": "15.00",
+            "direction": "OUT",
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "merchant": "Starbucks",
+        },
+    )
+    assert response_one.status_code == 201
+
+    response_two = authenticated_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account["id"],
+            "amount": "42.00",
+            "direction": "OUT",
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "merchant": "Amazon",
+        },
+    )
+    assert response_two.status_code == 201
+
+    filtered = authenticated_client.get("/api/v1/transactions?search=star")
+    assert filtered.status_code == 200
+    payload = filtered.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["merchant"] == "Starbucks"
+
+
+def test_transactions_export_csv(authenticated_client: TestClient) -> None:
+    account = _create_account(authenticated_client)
+    authenticated_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account["id"],
+            "amount": "10.00",
+            "direction": "OUT",
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "merchant": "Local Cafe",
+        },
+    )
+
+    export_response = authenticated_client.get("/api/v1/transactions/export")
+    assert export_response.status_code == 200
+    assert export_response.headers["content-type"].startswith("text/csv")
+    assert "Local Cafe" in export_response.text
+
+
 def test_accounts_list_pagination_metadata(authenticated_client: TestClient) -> None:
     _create_account(authenticated_client, name="A1")
     _create_account(authenticated_client, name="A2")

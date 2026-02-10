@@ -1,3 +1,5 @@
+import csv
+import io
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -82,6 +84,7 @@ class TransactionService:
         category_id: UUID | None = None,
         occurred_from: datetime | None = None,
         occurred_to: datetime | None = None,
+        search: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[Transaction], int]:
@@ -93,12 +96,17 @@ class TransactionService:
         normalized_from = normalize_occurred_at(occurred_from) if occurred_from else None
         normalized_to = normalize_occurred_at(occurred_to) if occurred_to else None
 
+        normalized_search = search.strip() if search else None
+        if normalized_search == "":
+            normalized_search = None
+
         transactions = await self.transaction_repository.list_by_user(
             user_id=user_id,
             account_id=account_id,
             category_id=category_id,
             occurred_from=normalized_from,
             occurred_to=normalized_to,
+            search=normalized_search,
             limit=limit,
             offset=offset,
         )
@@ -108,8 +116,91 @@ class TransactionService:
             category_id=category_id,
             occurred_from=normalized_from,
             occurred_to=normalized_to,
+            search=normalized_search,
         )
         return transactions, total
+
+    async def export_transactions_csv(
+        self,
+        user_id: UUID,
+        *,
+        account_id: UUID | None = None,
+        category_id: UUID | None = None,
+        occurred_from: datetime | None = None,
+        occurred_to: datetime | None = None,
+        search: str | None = None,
+        limit: int = 1000,
+        offset: int = 0,
+    ) -> str:
+        if account_id is not None:
+            await self._ensure_account_access(user_id, account_id)
+        if category_id is not None:
+            await self._ensure_category_access(user_id, category_id)
+
+        normalized_from = normalize_occurred_at(occurred_from) if occurred_from else None
+        normalized_to = normalize_occurred_at(occurred_to) if occurred_to else None
+
+        normalized_search = search.strip() if search else None
+        if normalized_search == "":
+            normalized_search = None
+
+        transactions = await self.transaction_repository.list_by_user(
+            user_id=user_id,
+            account_id=account_id,
+            category_id=category_id,
+            occurred_from=normalized_from,
+            occurred_to=normalized_to,
+            search=normalized_search,
+            limit=limit,
+            offset=offset,
+        )
+
+        accounts = await self.account_repository.list_by_user(
+            user_id,
+            include_inactive=True,
+            limit=5000,
+            offset=0,
+        )
+        categories = await self.category_repository.list_by_user(user_id, limit=5000, offset=0)
+        account_lookup = {account.id: account for account in accounts}
+        category_lookup = {category.id: category for category in categories}
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(
+            [
+                "occurred_at",
+                "direction",
+                "amount",
+                "account_name",
+                "account_id",
+                "category_name",
+                "category_id",
+                "merchant",
+                "note",
+            ]
+        )
+
+        for transaction in transactions:
+            account = account_lookup.get(transaction.account_id)
+            category = (
+                category_lookup.get(transaction.category_id) if transaction.category_id else None
+            )
+            writer.writerow(
+                [
+                    transaction.occurred_at.isoformat(),
+                    transaction.direction,
+                    f"{transaction.amount:.2f}",
+                    account.name if account else "",
+                    str(transaction.account_id),
+                    category.name if category else "",
+                    str(transaction.category_id) if transaction.category_id else "",
+                    transaction.merchant or "",
+                    transaction.note or "",
+                ]
+            )
+
+        return output.getvalue()
 
     async def update_transaction(
         self,
