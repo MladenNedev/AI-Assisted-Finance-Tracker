@@ -22,6 +22,7 @@ import type {
   CopyBudgetsResponse,
   CreateBudgetRequest,
   PaginatedResponse,
+  UpdateBudgetRequest,
 } from "../api/types";
 
 export default function Budgets() {
@@ -31,9 +32,12 @@ export default function Budgets() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [opened, setOpened] = useState(false);
+  const [editOpened, setEditOpened] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formCategoryId, setFormCategoryId] = useState<string | null>(null);
   const [formLimit, setFormLimit] = useState<number | "">("");
+  const [editingBudget, setEditingBudget] = useState<BudgetProgressItem | null>(null);
+  const [editLimit, setEditLimit] = useState<number | "">("");
 
   const categoryOptions = useMemo(
     () =>
@@ -90,6 +94,57 @@ export default function Budgets() {
     }
   };
 
+  const onOpenEdit = (item: BudgetProgressItem) => {
+    setEditingBudget(item);
+    setEditLimit(Number(item.limit_amount));
+    setEditOpened(true);
+  };
+
+  const onSubmitEdit = async () => {
+    if (!editingBudget || editLimit === "" || editLimit <= 0) {
+      setError("Please provide a valid budget limit");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      const payload: UpdateBudgetRequest = {
+        limit_amount: Number(editLimit).toFixed(2),
+      };
+      await apiFetch(`/budgets/${editingBudget.budget_id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      setEditOpened(false);
+      setEditingBudget(null);
+      setEditLimit("");
+      await loadMonth(month);
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const onDeleteBudget = async (item: BudgetProgressItem) => {
+    const confirmed = window.confirm(`Delete budget for "${item.category_name}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiFetch<void>(`/budgets/${item.budget_id}`, { method: "DELETE" });
+      await loadMonth(month);
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <Stack mt="md" gap="md">
       <Group justify="space-between" align="end">
@@ -99,7 +154,7 @@ export default function Budgets() {
             Expense budgets by category
           </Text>
         </div>
-        <Group>
+        <Group align="end">
           <TextInput
             label="Month"
             type="month"
@@ -139,9 +194,23 @@ export default function Budgets() {
                   <Text fw={600}>{item.category_name}</Text>
                   <Badge color={statusColor(item.status)}>{item.status.replace("_", " ")}</Badge>
                 </Group>
-                <Text fw={600}>
-                  ${item.spent_amount} / ${item.limit_amount}
-                </Text>
+                <Group gap="xs">
+                  <Text fw={600}>
+                    ${item.spent_amount} / ${item.limit_amount}
+                  </Text>
+                  <Button size="xs" variant="subtle" onClick={() => onOpenEdit(item)}>
+                    Edit
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    color="red"
+                    loading={submitting}
+                    onClick={() => onDeleteBudget(item)}
+                  >
+                    Delete
+                  </Button>
+                </Group>
               </Group>
 
               <Progress
@@ -193,6 +262,28 @@ export default function Budgets() {
           />
           <Button loading={submitting} onClick={onCreateBudget}>
             Save budget
+          </Button>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={editOpened}
+        onClose={() => setEditOpened(false)}
+        title={editingBudget ? `Edit ${editingBudget.category_name} budget` : "Edit budget"}
+        centered
+      >
+        <Stack>
+          <NumberInput
+            label="Monthly limit"
+            value={editLimit}
+            onChange={setEditLimit}
+            min={0}
+            decimalScale={2}
+            fixedDecimalScale
+            prefix="$"
+          />
+          <Button loading={submitting} onClick={onSubmitEdit}>
+            Update budget
           </Button>
         </Stack>
       </Modal>
