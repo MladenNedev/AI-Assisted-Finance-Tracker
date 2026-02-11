@@ -11,6 +11,7 @@ import {
   Progress,
   Select,
   Stack,
+  Table,
   Text,
   TextInput,
   Title,
@@ -42,6 +43,8 @@ import type {
   ReportGranularity,
   ReportPeriod,
   NetWorthTrendResponse,
+  HeatmapResponse,
+  MerchantSummaryResponse,
   AccountResponse,
   CategoryResponse,
 } from "../api/types";
@@ -72,6 +75,8 @@ export default function Dashboard() {
   const [categories, setCategories] = useState<CategoryBreakdownResponse | null>(null);
   const [categoryTrend, setCategoryTrend] = useState<CategoryTrendResponse | null>(null);
   const [netWorth, setNetWorth] = useState<NetWorthTrendResponse | null>(null);
+  const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(null);
+  const [merchantSummary, setMerchantSummary] = useState<MerchantSummaryResponse | null>(null);
   const [budgetProgress, setBudgetProgress] = useState<BudgetProgressResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -185,6 +190,8 @@ export default function Dashboard() {
       balance: toNumber(point.balance),
     }));
   }, [netWorth]);
+
+  const heatmapGrid = useMemo(() => buildHeatmapGrid(heatmap), [heatmap]);
 
   const quickCategoryOptions = useMemo(
     () =>
@@ -418,6 +425,86 @@ export default function Dashboard() {
             )}
           </Card>
 
+          <Grid>
+            <Grid.Col span={{ base: 12, lg: 7 }}>
+              <Card withBorder radius="md" p="lg">
+                <Group justify="space-between">
+                  <Title order={4}>Spending Heatmap</Title>
+                  <Text size="xs" c="dimmed">
+                    Daily expenses
+                  </Text>
+                </Group>
+                {heatmapGrid.weeks.length ? (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                      gap: 6,
+                      marginTop: 12,
+                    }}
+                  >
+                    {heatmapGrid.weeks.flat().map((day, index) =>
+                      day ? (
+                        <div
+                          key={day.key}
+                          title={`${day.label}: $${day.amount.toFixed(2)}`}
+                          style={{
+                            height: 20,
+                            borderRadius: 4,
+                            backgroundColor: heatmapColor(day.amount, heatmapGrid.max),
+                            border: "1px solid rgba(0,0,0,0.05)",
+                          }}
+                        />
+                      ) : (
+                        <div key={`empty-${index}`} style={{ height: 20 }} />
+                      ),
+                    )}
+                  </div>
+                ) : (
+                  <Text c="dimmed" size="sm" mt="sm">
+                    No heatmap data yet.
+                  </Text>
+                )}
+              </Card>
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, lg: 5 }}>
+              <Card withBorder radius="md" p="lg">
+                <Group justify="space-between">
+                  <Title order={4}>Top Merchants</Title>
+                  <Text size="xs" c="dimmed">
+                    Expenses
+                  </Text>
+                </Group>
+                {merchantSummary && merchantSummary.merchants.length ? (
+                  <Table mt="sm" highlightOnHover>
+                    <thead>
+                      <tr>
+                        <th>Merchant</th>
+                        <th style={{ textAlign: "right" }}>Total</th>
+                        <th style={{ textAlign: "right" }}>Count</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {merchantSummary.merchants.map((merchant) => (
+                        <tr key={merchant.merchant}>
+                          <td>{merchant.merchant}</td>
+                          <td style={{ textAlign: "right" }}>
+                            ${toNumber(merchant.total).toFixed(2)}
+                          </td>
+                          <td style={{ textAlign: "right" }}>{merchant.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                ) : (
+                  <Text c="dimmed" size="sm" mt="sm">
+                    No merchant data yet.
+                  </Text>
+                )}
+              </Card>
+            </Grid.Col>
+          </Grid>
+
           <Card withBorder radius="md" p="lg">
             <Group justify="space-between">
               <Title order={4}>Budget Overview (Current Month)</Title>
@@ -625,6 +712,28 @@ export default function Dashboard() {
       setCategoryTrend(trendData);
 
       try {
+        const [heatmapData, merchantData] = await Promise.all([
+          apiFetch<HeatmapResponse>(
+            `/reporting/heatmap?from_date=${encodeURIComponent(
+              dashboard.from_date,
+            )}&to_date=${encodeURIComponent(dashboard.to_date)}&breakdown_type=expense`,
+          ),
+          apiFetch<MerchantSummaryResponse>(
+            `/reporting/merchants?from_date=${encodeURIComponent(
+              dashboard.from_date,
+            )}&to_date=${encodeURIComponent(
+              dashboard.to_date,
+            )}&breakdown_type=expense&limit=8`,
+          ),
+        ]);
+        setHeatmap(heatmapData);
+        setMerchantSummary(merchantData);
+      } catch {
+        setHeatmap(null);
+        setMerchantSummary(null);
+      }
+
+      try {
         const budgetProgressData = await apiFetch<BudgetProgressResponse>(
           `/budgets/progress?month=${encodeURIComponent(currentMonth())}`,
         );
@@ -809,6 +918,77 @@ function formatPeriodLabel(value: string, granularity: ReportGranularity): strin
     return new Intl.DateTimeFormat("en-US", { month: "short", year: "2-digit" }).format(date);
   }
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+}
+
+function buildHeatmapGrid(heatmap: HeatmapResponse | null): {
+  weeks: Array<Array<{ key: string; amount: number; label: string } | null>>;
+  max: number;
+} {
+  if (!heatmap) {
+    return { weeks: [], max: 0 };
+  }
+
+  const amounts = new Map<string, number>();
+  let max = 0;
+  for (const point of heatmap.points) {
+    const amount = toNumber(point.amount);
+    amounts.set(point.date, amount);
+    if (amount > max) {
+      max = amount;
+    }
+  }
+
+  const start = new Date(heatmap.from_date);
+  const end = new Date(heatmap.to_date);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return { weeks: [], max };
+  }
+
+  const startDate = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+  const endDate = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+  if (
+    end.getUTCHours() === 0 &&
+    end.getUTCMinutes() === 0 &&
+    end.getUTCSeconds() === 0 &&
+    end.getUTCMilliseconds() === 0
+  ) {
+    endDate.setUTCDate(endDate.getUTCDate() - 1);
+  }
+  if (endDate < startDate) {
+    return { weeks: [], max };
+  }
+
+  const days: Array<{ key: string; amount: number; label: string } | null> = [];
+  const startDow = (startDate.getUTCDay() + 6) % 7;
+  for (let i = 0; i < startDow; i += 1) {
+    days.push(null);
+  }
+
+  const formatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+  for (
+    let cursor = new Date(startDate);
+    cursor <= endDate;
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
+    const key = cursor.toISOString().slice(0, 10);
+    const amount = amounts.get(key) ?? 0;
+    days.push({ key, amount, label: formatter.format(cursor) });
+  }
+
+  const weeks: Array<Array<{ key: string; amount: number; label: string } | null>> = [];
+  for (let i = 0; i < days.length; i += 7) {
+    weeks.push(days.slice(i, i + 7));
+  }
+  return { weeks, max };
+}
+
+function heatmapColor(amount: number, max: number): string {
+  if (max <= 0 || amount <= 0) {
+    return "#f1f3f5";
+  }
+  const intensity = Math.min(amount / max, 1);
+  const lightness = 92 - intensity * 50;
+  return `hsl(210, 60%, ${lightness}%)`;
 }
 
 function budgetStatusColor(status: "on_track" | "warning" | "exceeded"): string {

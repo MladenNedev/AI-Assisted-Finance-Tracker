@@ -356,6 +356,32 @@ export interface NetWorthTrendResponse {
   points: NetWorthPoint[];
 }
 
+export interface HeatmapPoint {
+  date: string;
+  amount: string;
+}
+
+export interface HeatmapResponse {
+  from_date: string;
+  to_date: string;
+  breakdown_type: CategoryBreakdownType;
+  points: HeatmapPoint[];
+}
+
+export interface MerchantSummaryItem {
+  merchant: string;
+  total: string;
+  count: number;
+  average: string;
+}
+
+export interface MerchantSummaryResponse {
+  from_date: string;
+  to_date: string;
+  breakdown_type: CategoryBreakdownType;
+  merchants: MerchantSummaryItem[];
+}
+
 export type BudgetStatus = "on_track" | "warning" | "exceeded";
 
 export interface BudgetResponse {
