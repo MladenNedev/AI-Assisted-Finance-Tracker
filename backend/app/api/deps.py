@@ -11,8 +11,10 @@ from app.persistence.repositories import (
     AccountRepository,
     BudgetRepository,
     CategoryRepository,
+    RecurringTransactionRepository,
     ReportingRepository,
     SessionRepository,
+    TransactionAttachmentRepository,
     TransactionRepository,
     UserRepository,
 )
@@ -21,6 +23,7 @@ from app.services.account_service import AccountService
 from app.services.auth_service import AuthService
 from app.services.budget_service import BudgetService
 from app.services.category_service import CategoryService
+from app.services.recurring_service import RecurringTransactionService
 from app.services.reporting_service import ReportingService
 from app.services.transaction_service import TransactionService
 
@@ -52,6 +55,18 @@ def get_transaction_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> TransactionRepository:
     return TransactionRepository(session)
+
+
+def get_recurring_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> RecurringTransactionRepository:
+    return RecurringTransactionRepository(session)
+
+
+def get_attachment_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TransactionAttachmentRepository:
+    return TransactionAttachmentRepository(session)
 
 
 def get_category_repository(
@@ -96,12 +111,32 @@ def get_transaction_service(
     account_repository: Annotated[AccountRepository, Depends(get_account_repository)],
     transaction_repository: Annotated[TransactionRepository, Depends(get_transaction_repository)],
     category_repository: Annotated[CategoryRepository, Depends(get_category_repository)],
+    attachment_repository: Annotated[TransactionAttachmentRepository, Depends(get_attachment_repository)],
 ) -> TransactionService:
     return TransactionService(
         session=session,
         account_repository=account_repository,
         transaction_repository=transaction_repository,
         category_repository=category_repository,
+        attachment_repository=attachment_repository,
+    )
+
+
+def get_recurring_service(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    recurring_repository: Annotated[
+        RecurringTransactionRepository, Depends(get_recurring_repository)
+    ],
+    account_repository: Annotated[AccountRepository, Depends(get_account_repository)],
+    category_repository: Annotated[CategoryRepository, Depends(get_category_repository)],
+    transaction_repository: Annotated[TransactionRepository, Depends(get_transaction_repository)],
+) -> RecurringTransactionService:
+    return RecurringTransactionService(
+        session=session,
+        recurring_repository=recurring_repository,
+        account_repository=account_repository,
+        category_repository=category_repository,
+        transaction_repository=transaction_repository,
     )
 
 
