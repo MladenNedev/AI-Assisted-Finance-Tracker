@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Categories from "./pages/Categories";
 import Transactions from "./pages/Transactions";
+import Recurring from "./pages/Recurring";
 
 function AppLayout() {
   const { user } = useAuth();
@@ -61,6 +62,14 @@ function AppLayout() {
                   variant={location.pathname.startsWith("/budgets") ? "light" : "subtle"}
                 >
                   Budgets
+                </Button>
+                <Button
+                  component={Link}
+                  to="/recurring"
+                  size="xs"
+                  variant={location.pathname.startsWith("/recurring") ? "light" : "subtle"}
+                >
+                  Recurring
                 </Button>
               </Group>
             ) : null}
@@ -118,6 +127,14 @@ function AppLayout() {
             element={
               <ProtectedRoute>
                 <Categories />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recurring"
+            element={
+              <ProtectedRoute>
+                <Recurring />
               </ProtectedRoute>
             }
           />
