@@ -37,6 +37,7 @@ def _create_transaction(
     direction: str,
     category_id: str | None = None,
     occurred_at: datetime | None = None,
+    merchant: str | None = None,
 ) -> dict[str, str]:
     response = client.post(
         "/api/v1/transactions",
@@ -46,6 +47,7 @@ def _create_transaction(
             "amount": amount,
             "direction": direction,
             "occurred_at": (occurred_at or datetime.now(UTC)).isoformat(),
+            "merchant": merchant,
         },
     )
     assert response.status_code == 201
@@ -228,6 +230,86 @@ def test_reporting_net_worth_trend(authenticated_client: TestClient) -> None:
     assert payload["points"]
     last_balance = Decimal(payload["points"][-1]["balance"])
     assert last_balance >= Decimal("100.00")
+
+
+def test_reporting_heatmap(authenticated_client: TestClient) -> None:
+    account = _create_account(authenticated_client)
+    now = datetime.now(UTC)
+    _create_transaction(
+        authenticated_client,
+        account["id"],
+        amount="12.00",
+        direction="OUT",
+        occurred_at=now - timedelta(days=2),
+    )
+    _create_transaction(
+        authenticated_client,
+        account["id"],
+        amount="24.00",
+        direction="OUT",
+        occurred_at=now - timedelta(days=1),
+    )
+
+    response = authenticated_client.get(
+        "/api/v1/reporting/heatmap",
+        params={
+            "from_date": (now - timedelta(days=3)).isoformat(),
+            "to_date": now.isoformat(),
+            "breakdown_type": "expense",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["breakdown_type"] == "expense"
+    points = {point["date"]: Decimal(point["amount"]) for point in payload["points"]}
+    assert points.get((now - timedelta(days=2)).date().isoformat()) == Decimal("12.00")
+    assert points.get((now - timedelta(days=1)).date().isoformat()) == Decimal("24.00")
+
+
+def test_reporting_merchant_summary(authenticated_client: TestClient) -> None:
+    account = _create_account(authenticated_client)
+    now = datetime.now(UTC)
+    _create_transaction(
+        authenticated_client,
+        account["id"],
+        amount="8.00",
+        direction="OUT",
+        occurred_at=now - timedelta(days=1),
+        merchant="Coffee Shop",
+    )
+    _create_transaction(
+        authenticated_client,
+        account["id"],
+        amount="12.00",
+        direction="OUT",
+        occurred_at=now - timedelta(days=1),
+        merchant="Coffee Shop",
+    )
+    _create_transaction(
+        authenticated_client,
+        account["id"],
+        amount="20.00",
+        direction="OUT",
+        occurred_at=now - timedelta(days=1),
+        merchant="Grocery",
+    )
+
+    response = authenticated_client.get(
+        "/api/v1/reporting/merchants",
+        params={
+            "from_date": (now - timedelta(days=3)).isoformat(),
+            "to_date": now.isoformat(),
+            "breakdown_type": "expense",
+            "limit": 5,
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["breakdown_type"] == "expense"
+    merchants = payload["merchants"]
+    assert merchants
+    assert merchants[0]["merchant"] == "Coffee Shop"
+    assert Decimal(merchants[0]["total"]) == Decimal("20.00")
 
 
 def test_reporting_export_cashflow_csv(authenticated_client: TestClient) -> None:
