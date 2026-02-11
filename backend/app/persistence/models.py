@@ -107,6 +107,11 @@ class Account(Base):
     opening_balance: Mapped[Decimal] = mapped_column(
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
+    color: Mapped[str | None] = mapped_column(String(7))
+    icon: Mapped[str | None] = mapped_column(String(50))
+    goal_name: Mapped[str | None] = mapped_column(String(100))
+    goal_target_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    goal_target_date: Mapped[date | None] = mapped_column(Date)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )

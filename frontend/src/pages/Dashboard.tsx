@@ -41,6 +41,7 @@ import type {
   PaginatedResponse,
   ReportGranularity,
   ReportPeriod,
+  NetWorthTrendResponse,
   AccountResponse,
   CategoryResponse,
 } from "../api/types";
@@ -70,6 +71,7 @@ export default function Dashboard() {
   const [cashflow, setCashflow] = useState<CashflowTrendResponse | null>(null);
   const [categories, setCategories] = useState<CategoryBreakdownResponse | null>(null);
   const [categoryTrend, setCategoryTrend] = useState<CategoryTrendResponse | null>(null);
+  const [netWorth, setNetWorth] = useState<NetWorthTrendResponse | null>(null);
   const [budgetProgress, setBudgetProgress] = useState<BudgetProgressResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +175,16 @@ export default function Dashboard() {
     }));
     return { data, keys };
   }, [categoryTrend]);
+
+  const netWorthSeries = useMemo(() => {
+    if (!netWorth) {
+      return [];
+    }
+    return netWorth.points.map((point) => ({
+      label: formatPeriodLabel(point.period, netWorth.granularity),
+      balance: toNumber(point.balance),
+    }));
+  }, [netWorth]);
 
   const quickCategoryOptions = useMemo(
     () =>
@@ -386,6 +398,27 @@ export default function Dashboard() {
           </Card>
 
           <Card withBorder radius="md" p="lg">
+            <Title order={4} mb="md">
+              Net Worth Trend
+            </Title>
+            {netWorthSeries.length ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={netWorthSeries}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="balance" stroke="#1C7ED6" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <Text c="dimmed" size="sm">
+                No net worth data yet.
+              </Text>
+            )}
+          </Card>
+
+          <Card withBorder radius="md" p="lg">
             <Group justify="space-between">
               <Title order={4}>Budget Overview (Current Month)</Title>
               <Button variant="subtle" size="xs" onClick={() => navigate("/budgets")}>
@@ -563,7 +596,7 @@ export default function Dashboard() {
 
       const granularity: ReportGranularity =
         selectedPeriod === "year" ? "month" : selectedPeriod === "month" ? "week" : "day";
-      const [cashflowData, categoryData] = await Promise.all([
+      const [cashflowData, categoryData, netWorthData] = await Promise.all([
         apiFetch<CashflowTrendResponse>(
           `/reporting/cashflow?from_date=${encodeURIComponent(
             dashboard.from_date,
@@ -574,9 +607,15 @@ export default function Dashboard() {
             dashboard.from_date,
           )}&to_date=${encodeURIComponent(dashboard.to_date)}&breakdown_type=expense&limit=8`,
         ),
+        apiFetch<NetWorthTrendResponse>(
+          `/reporting/net-worth?from_date=${encodeURIComponent(
+            dashboard.from_date,
+          )}&to_date=${encodeURIComponent(dashboard.to_date)}&granularity=${granularity}`,
+        ),
       ]);
       setCashflow(cashflowData);
       setCategories(categoryData);
+      setNetWorth(netWorthData);
 
       const trendData = await apiFetch<CategoryTrendResponse>(
         `/reporting/category-trend?from_date=${encodeURIComponent(

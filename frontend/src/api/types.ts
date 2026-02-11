@@ -45,6 +45,11 @@ export interface AccountResponse {
   account_type: AccountType;
   currency: string;
   opening_balance: string;
+  color: string | null;
+  icon: string | null;
+  goal_name: string | null;
+  goal_target_amount: string | null;
+  goal_target_date: string | null;
   current_balance: string;
   is_active: boolean;
   created_at: string;
@@ -88,12 +93,22 @@ export interface CreateAccountRequest {
   account_type: AccountType;
   opening_balance: string;
   currency: string;
+  color?: string | null;
+  icon?: string | null;
+  goal_name?: string | null;
+  goal_target_amount?: string | null;
+  goal_target_date?: string | null;
 }
 
 export interface UpdateAccountRequest {
   name?: string;
   account_type?: AccountType;
   currency?: string;
+  color?: string | null;
+  icon?: string | null;
+  goal_name?: string | null;
+  goal_target_amount?: string | null;
+  goal_target_date?: string | null;
 }
 
 export interface AccountBalanceResponse {
@@ -327,6 +342,18 @@ export interface CategoryTrendResponse {
   granularity: ReportGranularity;
   breakdown_type: CategoryBreakdownType;
   points: CategoryTrendPoint[];
+}
+
+export interface NetWorthPoint {
+  period: string;
+  balance: string;
+}
+
+export interface NetWorthTrendResponse {
+  from_date: string;
+  to_date: string;
+  granularity: ReportGranularity;
+  points: NetWorthPoint[];
 }
 
 export type BudgetStatus = "on_track" | "warning" | "exceeded";

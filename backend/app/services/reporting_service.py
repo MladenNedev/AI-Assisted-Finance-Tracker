@@ -26,6 +26,8 @@ from app.schemas.reporting import (
     CategoryTrendPoint,
     CategoryTrendResponse,
     DashboardSummaryResponse,
+    NetWorthPoint,
+    NetWorthTrendResponse,
 )
 
 
@@ -141,6 +143,62 @@ class ReportingService:
             current = _align_to_bucket(current + step, granularity)
 
         response = CashflowTrendResponse(
+            from_date=from_date,
+            to_date=to_date,
+            granularity=granularity,
+            points=points,
+        )
+        await self.cache.set_json(
+            key,
+            response.model_dump(mode="json"),
+            ttl_seconds=self.settings.report_cache_ttl_seconds,
+        )
+        return response
+
+    async def get_net_worth_trend(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        granularity: ReportGranularity,
+    ) -> NetWorthTrendResponse:
+        from_date, to_date = validate_date_range(from_date, to_date)
+        key = await self._build_cache_key(
+            user_id,
+            "net_worth",
+            {
+                "from_date": from_date.isoformat(),
+                "to_date": to_date.isoformat(),
+                "granularity": granularity.value,
+            },
+        )
+        cached = await self.cache.get_json(key)
+        if cached is not None:
+            return NetWorthTrendResponse.model_validate(cached)
+
+        base_balance = await self.reporting_repository.get_net_worth_base(user_id, as_of=from_date)
+        deltas = await self.reporting_repository.get_net_worth_deltas(
+            user_id,
+            from_date,
+            to_date,
+            granularity=granularity.value,
+        )
+        delta_by_period = {
+            normalize_report_datetime(row["period"]): Decimal(row["delta"])
+            for row in deltas
+            if isinstance(row.get("period"), datetime)
+        }
+
+        points: list[NetWorthPoint] = []
+        current = _align_to_bucket(from_date, granularity)
+        step = _granularity_step(granularity)
+        running = Decimal(base_balance)
+        while current < to_date:
+            running += Decimal(delta_by_period.get(current, Decimal("0")))
+            points.append(NetWorthPoint(period=current, balance=running))
+            current = _align_to_bucket(current + step, granularity)
+
+        response = NetWorthTrendResponse(
             from_date=from_date,
             to_date=to_date,
             granularity=granularity,

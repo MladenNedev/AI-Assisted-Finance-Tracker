@@ -34,6 +34,11 @@ async def create_account(
         account_type=payload.account_type.value,
         opening_balance=payload.opening_balance,
         currency=payload.currency,
+        color=payload.color,
+        icon=payload.icon,
+        goal_name=payload.goal_name,
+        goal_target_amount=payload.goal_target_amount,
+        goal_target_date=payload.goal_target_date,
     )
     balance = await account_service.get_balance(account.id, current_user.id)
     return _serialize_account(account, balance)
@@ -86,6 +91,11 @@ async def update_account(
         name=payload.name,
         account_type=payload.account_type.value if payload.account_type else None,
         currency=payload.currency,
+        color=payload.color,
+        icon=payload.icon,
+        goal_name=payload.goal_name,
+        goal_target_amount=payload.goal_target_amount,
+        goal_target_date=payload.goal_target_date,
     )
     balance = await account_service.get_balance(account.id, current_user.id)
     return _serialize_account(account, balance)
