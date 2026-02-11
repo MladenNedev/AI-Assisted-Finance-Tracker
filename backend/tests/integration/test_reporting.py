@@ -203,6 +203,33 @@ def test_reporting_category_trend(authenticated_client: TestClient) -> None:
     assert len(payload["points"]) >= 1
 
 
+def test_reporting_net_worth_trend(authenticated_client: TestClient) -> None:
+    account = _create_account(authenticated_client)
+    now = datetime.now(UTC)
+    _create_transaction(
+        authenticated_client,
+        account["id"],
+        amount="100.00",
+        direction="IN",
+        occurred_at=now - timedelta(days=1),
+    )
+
+    response = authenticated_client.get(
+        "/api/v1/reporting/net-worth",
+        params={
+            "from_date": (now - timedelta(days=2)).isoformat(),
+            "to_date": now.isoformat(),
+            "granularity": "day",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["granularity"] == "day"
+    assert payload["points"]
+    last_balance = Decimal(payload["points"][-1]["balance"])
+    assert last_balance >= Decimal("100.00")
+
+
 def test_reporting_cache_invalidation_on_transaction_write(
     authenticated_client: TestClient,
 ) -> None:

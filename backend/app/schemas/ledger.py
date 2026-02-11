@@ -1,10 +1,10 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.domain.category import normalize_category_color
+from app.domain.category import normalize_category_color, normalize_category_icon
 from app.domain.money import AccountType, TransactionDirection, normalize_currency, quantize_money
 
 
@@ -19,6 +19,11 @@ class AccountCreateRequest(BaseModel):
     account_type: AccountType
     opening_balance: Decimal = Decimal("0")
     currency: str = Field(default="USD", min_length=3, max_length=3)
+    color: str | None = Field(default=None, min_length=7, max_length=7)
+    icon: str | None = Field(default=None, max_length=50)
+    goal_name: str | None = Field(default=None, max_length=100)
+    goal_target_amount: Decimal | None = Field(default=None, gt=0)
+    goal_target_date: date | None = None
 
     @field_validator("opening_balance")
     @classmethod
@@ -30,11 +35,26 @@ class AccountCreateRequest(BaseModel):
     def validate_currency(cls, value: str) -> str:
         return normalize_currency(value)
 
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, value: str | None) -> str | None:
+        return normalize_category_color(value)
+
+    @field_validator("icon")
+    @classmethod
+    def validate_icon(cls, value: str | None) -> str | None:
+        return normalize_category_icon(value)
+
 
 class AccountUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     account_type: AccountType | None = None
     currency: str | None = Field(default=None, min_length=3, max_length=3)
+    color: str | None = Field(default=None, min_length=7, max_length=7)
+    icon: str | None = Field(default=None, max_length=50)
+    goal_name: str | None = Field(default=None, max_length=100)
+    goal_target_amount: Decimal | None = Field(default=None, gt=0)
+    goal_target_date: date | None = None
 
     @field_validator("currency")
     @classmethod
@@ -42,6 +62,16 @@ class AccountUpdateRequest(BaseModel):
         if value is None:
             return None
         return normalize_currency(value)
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, value: str | None) -> str | None:
+        return normalize_category_color(value)
+
+    @field_validator("icon")
+    @classmethod
+    def validate_icon(cls, value: str | None) -> str | None:
+        return normalize_category_icon(value)
 
 
 class AccountResponse(BaseModel):
@@ -53,6 +83,11 @@ class AccountResponse(BaseModel):
     account_type: AccountType
     currency: str
     opening_balance: Decimal
+    color: str | None
+    icon: str | None
+    goal_name: str | None
+    goal_target_amount: Decimal | None
+    goal_target_date: date | None
     current_balance: Decimal = Decimal("0")
     is_active: bool
     created_at: datetime

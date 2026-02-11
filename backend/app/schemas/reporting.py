@@ -74,3 +74,15 @@ class CategoryTrendResponse(BaseModel):
     granularity: ReportGranularity
     breakdown_type: CategoryBreakdownType
     points: list[CategoryTrendPoint]
+
+
+class NetWorthPoint(BaseModel):
+    period: datetime
+    balance: Decimal
+
+
+class NetWorthTrendResponse(BaseModel):
+    from_date: datetime
+    to_date: datetime
+    granularity: ReportGranularity
+    points: list[NetWorthPoint]

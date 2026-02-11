@@ -13,6 +13,7 @@ from app.schemas.reporting import (
     CategoryBreakdownResponse,
     CategoryTrendResponse,
     DashboardSummaryResponse,
+    NetWorthTrendResponse,
 )
 from app.services.reporting_service import ReportingService
 
@@ -105,4 +106,21 @@ async def get_category_trend(
         granularity,
         breakdown_type,
         limit=limit,
+    )
+
+
+@router.get("/net-worth", response_model=NetWorthTrendResponse)
+async def get_net_worth_trend(
+    current_user: Annotated[User, Depends(get_current_user)],
+    reporting_service: Annotated[ReportingService, Depends(get_reporting_service)],
+    _: Annotated[None, Depends(enforce_reporting_rate_limit)],
+    from_date: Annotated[datetime, Query()],
+    to_date: Annotated[datetime, Query()],
+    granularity: Annotated[ReportGranularity, Query()] = ReportGranularity.MONTH,
+) -> NetWorthTrendResponse:
+    return await reporting_service.get_net_worth_trend(
+        current_user.id,
+        from_date,
+        to_date,
+        granularity,
     )
