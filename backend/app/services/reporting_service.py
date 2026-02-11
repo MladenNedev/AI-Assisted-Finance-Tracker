@@ -26,6 +26,10 @@ from app.schemas.reporting import (
     CategoryTrendPoint,
     CategoryTrendResponse,
     DashboardSummaryResponse,
+    HeatmapPoint,
+    HeatmapResponse,
+    MerchantSummaryItem,
+    MerchantSummaryResponse,
     NetWorthPoint,
     NetWorthTrendResponse,
 )
@@ -347,6 +351,126 @@ class ReportingService:
             granularity=granularity,
             breakdown_type=breakdown_type,
             points=points,
+        )
+        await self.cache.set_json(
+            key,
+            response.model_dump(mode="json"),
+            ttl_seconds=self.settings.report_cache_ttl_seconds,
+        )
+        return response
+
+    async def get_spending_heatmap(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        breakdown_type: CategoryBreakdownType,
+    ) -> HeatmapResponse:
+        from_date, to_date = validate_date_range(from_date, to_date)
+        key = await self._build_cache_key(
+            user_id,
+            "heatmap",
+            {
+                "from_date": from_date.isoformat(),
+                "to_date": to_date.isoformat(),
+                "type": breakdown_type.value,
+            },
+        )
+        cached = await self.cache.get_json(key)
+        if cached is not None:
+            return HeatmapResponse.model_validate(cached)
+
+        direction = (
+            TransactionDirection.OUT
+            if breakdown_type == CategoryBreakdownType.EXPENSE
+            else TransactionDirection.IN
+        )
+        rows = await self.reporting_repository.get_daily_totals(
+            user_id,
+            from_date,
+            to_date,
+            direction=direction,
+        )
+        amount_by_date: dict[datetime.date, Decimal] = {}
+        for row in rows:
+            period = row.get("period")
+            if isinstance(period, datetime):
+                amount_by_date[normalize_report_datetime(period).date()] = Decimal(row["amount"])
+
+        points: list[HeatmapPoint] = []
+        current = normalize_report_datetime(from_date).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        end = normalize_report_datetime(to_date)
+        while current < end:
+            date_key = current.date()
+            amount = amount_by_date.get(date_key, Decimal("0"))
+            points.append(HeatmapPoint(date=date_key, amount=amount))
+            current += timedelta(days=1)
+
+        response = HeatmapResponse(
+            from_date=from_date,
+            to_date=to_date,
+            breakdown_type=breakdown_type,
+            points=points,
+        )
+        await self.cache.set_json(
+            key,
+            response.model_dump(mode="json"),
+            ttl_seconds=self.settings.report_cache_ttl_seconds,
+        )
+        return response
+
+    async def get_merchant_summary(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        breakdown_type: CategoryBreakdownType,
+        *,
+        limit: int = 10,
+    ) -> MerchantSummaryResponse:
+        from_date, to_date = validate_date_range(from_date, to_date)
+        key = await self._build_cache_key(
+            user_id,
+            "merchants",
+            {
+                "from_date": from_date.isoformat(),
+                "to_date": to_date.isoformat(),
+                "type": breakdown_type.value,
+                "limit": limit,
+            },
+        )
+        cached = await self.cache.get_json(key)
+        if cached is not None:
+            return MerchantSummaryResponse.model_validate(cached)
+
+        direction = (
+            TransactionDirection.OUT
+            if breakdown_type == CategoryBreakdownType.EXPENSE
+            else TransactionDirection.IN
+        )
+        rows = await self.reporting_repository.get_merchant_summary(
+            user_id,
+            from_date,
+            to_date,
+            direction=direction,
+            limit=limit,
+        )
+        merchants = [
+            MerchantSummaryItem(
+                merchant=str(row["merchant"]),
+                total=Decimal(row["total"]),
+                count=int(row["count"]),
+                average=Decimal(row["average"]),
+            )
+            for row in rows
+        ]
+        response = MerchantSummaryResponse(
+            from_date=from_date,
+            to_date=to_date,
+            breakdown_type=breakdown_type,
+            merchants=merchants,
         )
         await self.cache.set_json(
             key,

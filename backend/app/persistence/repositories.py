@@ -1113,3 +1113,77 @@ class ReportingRepository:
             }
             for row in rows
         ]
+
+    async def get_daily_totals(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        *,
+        direction: TransactionDirection,
+    ) -> list[dict[str, object]]:
+        period_expr = func.date_trunc("day", Transaction.occurred_at)
+        amount_expr = func.coalesce(func.sum(Transaction.amount), Decimal("0"))
+        stmt = (
+            select(period_expr.label("period"), amount_expr.label("amount"))
+            .select_from(Transaction)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(
+                Account.user_id == user_id,
+                Transaction.direction == direction.value,
+                Transaction.transfer_id.is_(None),
+                Transaction.occurred_at >= from_date,
+                Transaction.occurred_at < to_date,
+            )
+            .group_by(period_expr)
+            .order_by(period_expr.asc())
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [{"period": row.period, "amount": Decimal(row.amount or 0)} for row in rows]
+
+    async def get_merchant_summary(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        *,
+        direction: TransactionDirection,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        merchant_expr = func.coalesce(func.nullif(func.trim(Transaction.merchant), ""), "Unknown")
+        total_expr = func.coalesce(func.sum(Transaction.amount), Decimal("0"))
+        count_expr = func.count(Transaction.id)
+        stmt = (
+            select(
+                merchant_expr.label("merchant"),
+                total_expr.label("total"),
+                count_expr.label("count"),
+            )
+            .select_from(Transaction)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(
+                Account.user_id == user_id,
+                Transaction.direction == direction.value,
+                Transaction.transfer_id.is_(None),
+                Transaction.occurred_at >= from_date,
+                Transaction.occurred_at < to_date,
+            )
+            .group_by(merchant_expr)
+            .order_by(total_expr.desc())
+            .limit(limit)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        results: list[dict[str, object]] = []
+        for row in rows:
+            total = Decimal(row.total or 0)
+            count = int(row.count or 0)
+            average = (total / count) if count else Decimal("0")
+            results.append(
+                {
+                    "merchant": str(row.merchant),
+                    "total": total,
+                    "count": count,
+                    "average": average,
+                }
+            )
+        return results

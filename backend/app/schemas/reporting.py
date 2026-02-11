@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -86,3 +86,29 @@ class NetWorthTrendResponse(BaseModel):
     to_date: datetime
     granularity: ReportGranularity
     points: list[NetWorthPoint]
+
+
+class HeatmapPoint(BaseModel):
+    date: date
+    amount: Decimal
+
+
+class HeatmapResponse(BaseModel):
+    from_date: datetime
+    to_date: datetime
+    breakdown_type: CategoryBreakdownType
+    points: list[HeatmapPoint]
+
+
+class MerchantSummaryItem(BaseModel):
+    merchant: str
+    total: Decimal
+    count: int
+    average: Decimal
+
+
+class MerchantSummaryResponse(BaseModel):
+    from_date: datetime
+    to_date: datetime
+    breakdown_type: CategoryBreakdownType
+    merchants: list[MerchantSummaryItem]

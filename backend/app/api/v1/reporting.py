@@ -19,6 +19,8 @@ from app.schemas.reporting import (
     CategoryBreakdownResponse,
     CategoryTrendResponse,
     DashboardSummaryResponse,
+    HeatmapResponse,
+    MerchantSummaryResponse,
     NetWorthTrendResponse,
 )
 from app.services.reporting_service import ReportingService
@@ -129,6 +131,42 @@ async def get_net_worth_trend(
         from_date,
         to_date,
         granularity,
+    )
+
+
+@router.get("/heatmap", response_model=HeatmapResponse)
+async def get_spending_heatmap(
+    current_user: Annotated[User, Depends(get_current_user)],
+    reporting_service: Annotated[ReportingService, Depends(get_reporting_service)],
+    _: Annotated[None, Depends(enforce_reporting_rate_limit)],
+    from_date: Annotated[datetime, Query()],
+    to_date: Annotated[datetime, Query()],
+    breakdown_type: Annotated[CategoryBreakdownType, Query()] = CategoryBreakdownType.EXPENSE,
+) -> HeatmapResponse:
+    return await reporting_service.get_spending_heatmap(
+        current_user.id,
+        from_date,
+        to_date,
+        breakdown_type,
+    )
+
+
+@router.get("/merchants", response_model=MerchantSummaryResponse)
+async def get_merchant_summary(
+    current_user: Annotated[User, Depends(get_current_user)],
+    reporting_service: Annotated[ReportingService, Depends(get_reporting_service)],
+    _: Annotated[None, Depends(enforce_reporting_rate_limit)],
+    from_date: Annotated[datetime, Query()],
+    to_date: Annotated[datetime, Query()],
+    breakdown_type: Annotated[CategoryBreakdownType, Query()] = CategoryBreakdownType.EXPENSE,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> MerchantSummaryResponse:
+    return await reporting_service.get_merchant_summary(
+        current_user.id,
+        from_date,
+        to_date,
+        breakdown_type,
+        limit=limit,
     )
 
 
