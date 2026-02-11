@@ -1,3 +1,4 @@
+import io
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -274,6 +275,90 @@ def test_transactions_export_csv(authenticated_client: TestClient) -> None:
     assert export_response.status_code == 200
     assert export_response.headers["content-type"].startswith("text/csv")
     assert "Local Cafe" in export_response.text
+
+
+def test_transactions_bulk_category_update(authenticated_client: TestClient) -> None:
+    account = _create_account(authenticated_client)
+    groceries = _create_category(authenticated_client, name="Groceries")
+
+    first = authenticated_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account["id"],
+            "amount": "12.00",
+            "direction": "OUT",
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "merchant": "Cafe",
+        },
+    ).json()
+    second = authenticated_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account["id"],
+            "amount": "18.00",
+            "direction": "OUT",
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "merchant": "Market",
+        },
+    ).json()
+
+    response = authenticated_client.post(
+        "/api/v1/transactions/bulk-category",
+        json={
+            "transaction_ids": [first["id"], second["id"]],
+            "category_id": groceries["id"],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["updated_count"] == 2
+
+    listing = authenticated_client.get(f"/api/v1/transactions?category_id={groceries['id']}")
+    assert listing.status_code == 200
+    assert listing.json()["total"] >= 2
+
+
+def test_transactions_import_csv(authenticated_client: TestClient) -> None:
+    account = _create_account(authenticated_client)
+    category = _create_category(authenticated_client, name="Groceries")
+
+    occurred_at = datetime.now(UTC).isoformat()
+    csv_payload = "\n".join(
+        [
+            "occurred_at,direction,amount,account_name,account_id,category_name,category_id,merchant,note,tags",
+            f"{occurred_at},OUT,9.99,,{account['id']},,{category['id']},Corner Store,Snacks,\"groceries,quick\"",
+        ]
+    )
+    files = {"file": ("transactions.csv", io.BytesIO(csv_payload.encode("utf-8")), "text/csv")}
+    response = authenticated_client.post("/api/v1/transactions/import", files=files)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["imported"] == 1
+    assert payload["skipped"] == 0
+
+    tagged = authenticated_client.get("/api/v1/transactions?tag=groceries")
+    assert tagged.status_code == 200
+    assert tagged.json()["total"] >= 1
+
+
+def test_transactions_transfer_creates_pair(authenticated_client: TestClient) -> None:
+    from_account = _create_account(authenticated_client, name="Checking")
+    to_account = _create_account(authenticated_client, name="Savings")
+
+    response = authenticated_client.post(
+        "/api/v1/transactions/transfer",
+        json={
+            "from_account_id": from_account["id"],
+            "to_account_id": to_account["id"],
+            "amount": "50.00",
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "note": "Move funds",
+        },
+    )
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["transfer_id"]
+    assert payload["outgoing"]["direction"] == "OUT"
+    assert payload["incoming"]["direction"] == "IN"
 
 
 def test_accounts_list_pagination_metadata(authenticated_client: TestClient) -> None:

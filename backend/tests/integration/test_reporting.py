@@ -77,6 +77,30 @@ def test_reporting_dashboard_summary(authenticated_client: TestClient) -> None:
     assert len(payload["accounts"]) == 1
 
 
+def test_reporting_dashboard_custom_range(authenticated_client: TestClient) -> None:
+    account = _create_account(authenticated_client)
+    now = datetime.now(UTC)
+    _create_transaction(
+        authenticated_client,
+        account["id"],
+        amount="80.00",
+        direction="IN",
+        occurred_at=now - timedelta(days=1),
+    )
+
+    response = authenticated_client.get(
+        "/api/v1/reporting/dashboard",
+        params={
+            "period": "custom",
+            "from_date": (now - timedelta(days=2)).isoformat(),
+            "to_date": now.isoformat(),
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["period"] == "custom"
+
+
 def test_reporting_cashflow_trend(authenticated_client: TestClient) -> None:
     account = _create_account(authenticated_client)
     now = datetime.now(UTC)
@@ -141,6 +165,42 @@ def test_reporting_category_breakdown(authenticated_client: TestClient) -> None:
     assert Decimal(payload["total"]) == Decimal("50.00")
     assert len(payload["categories"]) >= 1
     assert payload["categories"][0]["category_name"] == "Food"
+
+
+def test_reporting_category_trend(authenticated_client: TestClient) -> None:
+    account = _create_account(authenticated_client)
+    category = _create_category(authenticated_client)
+    now = datetime.now(UTC)
+    _create_transaction(
+        authenticated_client,
+        account["id"],
+        amount="12.00",
+        direction="OUT",
+        category_id=category["id"],
+        occurred_at=now - timedelta(days=3),
+    )
+    _create_transaction(
+        authenticated_client,
+        account["id"],
+        amount="22.00",
+        direction="OUT",
+        category_id=category["id"],
+        occurred_at=now - timedelta(days=1),
+    )
+
+    response = authenticated_client.get(
+        "/api/v1/reporting/category-trend",
+        params={
+            "from_date": (now - timedelta(days=7)).isoformat(),
+            "to_date": now.isoformat(),
+            "granularity": "day",
+            "breakdown_type": "expense",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["breakdown_type"] == "expense"
+    assert len(payload["points"]) >= 1
 
 
 def test_reporting_cache_invalidation_on_transaction_write(
