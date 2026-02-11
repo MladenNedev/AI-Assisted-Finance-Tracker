@@ -10,12 +10,25 @@ import {
   Progress,
   Select,
   Stack,
+  Switch,
   Text,
   TextInput,
   Title,
 } from "@mantine/core";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { ApiError, apiFetch } from "../api/client";
 import type {
+  BudgetSummaryItem,
+  BudgetSummaryResponse,
   BudgetProgressItem,
   BudgetProgressResponse,
   CategoryResponse,
@@ -28,6 +41,7 @@ import type {
 export default function Budgets() {
   const [month, setMonth] = useState(currentMonth());
   const [items, setItems] = useState<BudgetProgressItem[]>([]);
+  const [summaryItems, setSummaryItems] = useState<BudgetSummaryItem[]>([]);
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -36,8 +50,10 @@ export default function Budgets() {
   const [error, setError] = useState<string | null>(null);
   const [formCategoryId, setFormCategoryId] = useState<string | null>(null);
   const [formLimit, setFormLimit] = useState<number | "">("");
+  const [formRollover, setFormRollover] = useState(false);
   const [editingBudget, setEditingBudget] = useState<BudgetProgressItem | null>(null);
   const [editLimit, setEditLimit] = useState<number | "">("");
+  const [editRollover, setEditRollover] = useState(false);
 
   const categoryOptions = useMemo(
     () =>
@@ -45,6 +61,16 @@ export default function Budgets() {
         .filter((category) => !category.is_income)
         .map((category) => ({ value: category.id, label: category.name })),
     [categories],
+  );
+
+  const summarySeries = useMemo(
+    () =>
+      summaryItems.map((item) => ({
+        month: formatMonthLabel(item.month),
+        budgeted: toNumber(item.budgeted),
+        spent: toNumber(item.spent),
+      })),
+    [summaryItems],
   );
 
   useEffect(() => {
@@ -64,6 +90,7 @@ export default function Budgets() {
         category_id: formCategoryId,
         month,
         limit_amount: Number(formLimit).toFixed(2),
+        rollover_enabled: formRollover,
       };
       await apiFetch("/budgets", { method: "POST", body: JSON.stringify(payload) });
       closeModal();
@@ -97,6 +124,7 @@ export default function Budgets() {
   const onOpenEdit = (item: BudgetProgressItem) => {
     setEditingBudget(item);
     setEditLimit(Number(item.limit_amount));
+    setEditRollover(item.rollover_enabled);
     setEditOpened(true);
   };
 
@@ -111,6 +139,7 @@ export default function Budgets() {
     try {
       const payload: UpdateBudgetRequest = {
         limit_amount: Number(editLimit).toFixed(2),
+        rollover_enabled: editRollover,
       };
       await apiFetch(`/budgets/${editingBudget.budget_id}`, {
         method: "PATCH",
@@ -180,6 +209,28 @@ export default function Budgets() {
         </Card>
       ) : null}
 
+      {summaryItems.length ? (
+        <Card withBorder radius="md" p="lg">
+          <Group justify="space-between" mb="sm">
+            <Title order={4}>Budget vs Actual</Title>
+            <Text size="sm" c="dimmed">
+              Last {summaryItems.length} months
+            </Text>
+          </Group>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={summarySeries}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="budgeted" fill="#2E86AB" name="Budgeted" />
+              <Bar dataKey="spent" fill="#C73E1D" name="Spent" />
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      ) : null}
+
       {!loading && items.length === 0 ? (
         <Card withBorder radius="md" p="lg">
           <Text c="dimmed">No budgets configured for {month}.</Text>
@@ -237,6 +288,16 @@ export default function Budgets() {
                   Projected: ${item.projected_spend}
                 </Text>
               </Group>
+              {item.rollover_enabled ? (
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">
+                    Rollover: ${item.rollover_amount}
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    Effective limit: ${item.effective_limit}
+                  </Text>
+                </Group>
+              ) : null}
             </Card>
           ))
         : null}
@@ -260,6 +321,12 @@ export default function Budgets() {
             fixedDecimalScale
             prefix="$"
           />
+          <Switch
+            label="Enable rollover"
+            description="Carry unused budget into next month."
+            checked={formRollover}
+            onChange={(event) => setFormRollover(event.currentTarget.checked)}
+          />
           <Button loading={submitting} onClick={onCreateBudget}>
             Save budget
           </Button>
@@ -282,6 +349,12 @@ export default function Budgets() {
             fixedDecimalScale
             prefix="$"
           />
+          <Switch
+            label="Enable rollover"
+            description="Carry unused budget into next month."
+            checked={editRollover}
+            onChange={(event) => setEditRollover(event.currentTarget.checked)}
+          />
           <Button loading={submitting} onClick={onSubmitEdit}>
             Update budget
           </Button>
@@ -294,12 +367,14 @@ export default function Budgets() {
     setLoading(true);
     setError(null);
     try {
-      const [progressResponse, categoriesResponse] = await Promise.all([
+      const [progressResponse, categoriesResponse, summaryResponse] = await Promise.all([
         apiFetch<BudgetProgressResponse>(`/budgets/progress?month=${targetMonth}`),
         apiFetch<PaginatedResponse<CategoryResponse>>("/categories?limit=500&offset=0"),
+        apiFetch<BudgetSummaryResponse>("/budgets/summary?months=6"),
       ]);
       setItems(progressResponse.items);
       setCategories(categoriesResponse.items);
+      setSummaryItems(summaryResponse.items);
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     } finally {
@@ -311,6 +386,7 @@ export default function Budgets() {
     setOpened(false);
     setFormCategoryId(null);
     setFormLimit("");
+    setFormRollover(false);
   }
 }
 
@@ -327,6 +403,25 @@ function statusColor(status: BudgetProgressItem["status"]): string {
 function currentMonth(): string {
   const now = new Date();
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatMonthLabel(value: string): string {
+  const parsed = new Date(`${value}-01T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    year: "2-digit",
+  }).format(parsed);
+}
+
+function toNumber(value: string): number {
+  const parsed = Number.parseFloat(value);
+  if (Number.isNaN(parsed)) {
+    return 0;
+  }
+  return parsed;
 }
 
 function getErrorMessage(error: unknown): string {
