@@ -41,6 +41,12 @@ class Settings(BaseSettings):
         default=False, alias="RATE_LIMIT_REPORTING_FAIL_CLOSED"
     )
     frontend_dist_dir: str | None = Field(default=None, alias="FRONTEND_DIST_DIR")
+    attachments_dir: str = Field(default="attachments", alias="ATTACHMENTS_DIR")
+    attachment_max_bytes: int = Field(default=5 * 1024 * 1024, alias="ATTACHMENT_MAX_BYTES")
+    attachment_allowed_types: str = Field(
+        default="image/jpeg,image/png,application/pdf",
+        alias="ATTACHMENT_ALLOWED_TYPES",
+    )
     sentry_dsn: str | None = Field(default=None, alias="SENTRY_DSN")
     sentry_environment: str = Field(default="development", alias="SENTRY_ENVIRONMENT")
     sentry_traces_sample_rate: float = Field(default=0.1, alias="SENTRY_TRACES_SAMPLE_RATE")
@@ -72,6 +78,14 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def attachment_allowed_type_list(self) -> list[str]:
+        return [
+            content_type.strip()
+            for content_type in self.attachment_allowed_types.split(",")
+            if content_type.strip()
+        ]
 
 
 @lru_cache

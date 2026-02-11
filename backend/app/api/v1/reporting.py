@@ -11,6 +11,7 @@ from app.persistence.models import User
 from app.schemas.reporting import (
     CashflowTrendResponse,
     CategoryBreakdownResponse,
+    CategoryTrendResponse,
     DashboardSummaryResponse,
 )
 from app.services.reporting_service import ReportingService
@@ -39,8 +40,15 @@ async def get_dashboard_summary(
     reporting_service: Annotated[ReportingService, Depends(get_reporting_service)],
     _: Annotated[None, Depends(enforce_reporting_rate_limit)],
     period: Annotated[ReportPeriod, Query()] = ReportPeriod.MONTH,
+    from_date: Annotated[datetime | None, Query()] = None,
+    to_date: Annotated[datetime | None, Query()] = None,
 ) -> DashboardSummaryResponse:
-    return await reporting_service.get_dashboard_summary(current_user.id, period)
+    return await reporting_service.get_dashboard_summary(
+        current_user.id,
+        period,
+        from_date=from_date,
+        to_date=to_date,
+    )
 
 
 @router.get("/cashflow", response_model=CashflowTrendResponse)
@@ -74,6 +82,27 @@ async def get_category_breakdown(
         current_user.id,
         from_date,
         to_date,
+        breakdown_type,
+        limit=limit,
+    )
+
+
+@router.get("/category-trend", response_model=CategoryTrendResponse)
+async def get_category_trend(
+    current_user: Annotated[User, Depends(get_current_user)],
+    reporting_service: Annotated[ReportingService, Depends(get_reporting_service)],
+    _: Annotated[None, Depends(enforce_reporting_rate_limit)],
+    from_date: Annotated[datetime, Query()],
+    to_date: Annotated[datetime, Query()],
+    granularity: Annotated[ReportGranularity, Query()] = ReportGranularity.WEEK,
+    breakdown_type: Annotated[CategoryBreakdownType, Query()] = CategoryBreakdownType.EXPENSE,
+    limit: Annotated[int, Query(ge=1, le=10)] = 5,
+) -> CategoryTrendResponse:
+    return await reporting_service.get_category_trend(
+        current_user.id,
+        from_date,
+        to_date,
+        granularity,
         breakdown_type,
         limit=limit,
     )

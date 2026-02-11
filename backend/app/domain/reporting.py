@@ -9,6 +9,7 @@ class ReportPeriod(StrEnum):
     WEEK = "week"
     MONTH = "month"
     YEAR = "year"
+    CUSTOM = "custom"
 
 
 class ReportGranularity(StrEnum):

@@ -13,6 +13,8 @@ from app.schemas.budget import (
     BudgetProgressItem,
     BudgetProgressResponse,
     BudgetResponse,
+    BudgetSummaryItem,
+    BudgetSummaryResponse,
     BudgetUpdateRequest,
     CopyBudgetsRequest,
     CopyBudgetsResponse,
@@ -29,6 +31,7 @@ def _serialize_budget(budget: Budget) -> BudgetResponse:
         category_id=budget.category_id,
         month=format_budget_month(budget.month_start),
         limit_amount=budget.limit_amount,
+        rollover_enabled=budget.rollover_enabled,
         created_at=budget.created_at,
         updated_at=budget.updated_at,
     )
@@ -45,6 +48,7 @@ async def create_budget(
         category_id=payload.category_id,
         month=payload.month,
         limit_amount=payload.limit_amount,
+        rollover_enabled=payload.rollover_enabled,
     )
     return _serialize_budget(budget)
 
@@ -87,6 +91,26 @@ async def get_budget_progress(
     )
 
 
+@router.get("/summary", response_model=BudgetSummaryResponse)
+async def get_budget_summary(
+    current_user: Annotated[User, Depends(get_current_user)],
+    budget_service: Annotated[BudgetService, Depends(get_budget_service)],
+    months: Annotated[int, Query(ge=1, le=24)] = 6,
+) -> BudgetSummaryResponse:
+    items = await budget_service.get_budget_vs_actual(current_user.id, months=months)
+    return BudgetSummaryResponse(
+        items=[
+            BudgetSummaryItem(
+                month=format_budget_month(item["month"]),
+                budgeted=item["budgeted"],
+                spent=item["spent"],
+                variance=item["variance"],
+            )
+            for item in items
+        ]
+    )
+
+
 @router.get("/{budget_id}", response_model=BudgetResponse)
 async def get_budget(
     budget_id: UUID,
@@ -104,12 +128,13 @@ async def update_budget(
     current_user: Annotated[User, Depends(get_current_user)],
     budget_service: Annotated[BudgetService, Depends(get_budget_service)],
 ) -> BudgetResponse:
-    if payload.limit_amount is None:
+    if payload.limit_amount is None and payload.rollover_enabled is None:
         raise DomainExceptionError("No fields were provided for update")
     budget = await budget_service.update_budget(
         budget_id=budget_id,
         user_id=current_user.id,
         limit_amount=payload.limit_amount,
+        rollover_enabled=payload.rollover_enabled,
     )
     return _serialize_budget(budget)
 

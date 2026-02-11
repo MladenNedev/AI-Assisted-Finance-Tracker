@@ -4,6 +4,7 @@ from uuid import UUID
 
 from app.core.cache import CacheService, cache, report_cache_key
 from app.core.config import get_settings
+from app.core.exceptions import DomainExceptionError
 from app.domain.money import TransactionDirection
 from app.domain.reporting import (
     CategoryBreakdownType,
@@ -20,6 +21,8 @@ from app.schemas.reporting import (
     CashflowTrendResponse,
     CategoryBreakdownItem,
     CategoryBreakdownResponse,
+    CategoryTrendPoint,
+    CategoryTrendResponse,
     DashboardSummaryResponse,
 )
 
@@ -39,8 +42,17 @@ class ReportingService:
         self,
         user_id: UUID,
         period: ReportPeriod,
+        *,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
     ) -> DashboardSummaryResponse:
-        from_date, to_date = get_period_bounds(period)
+        if from_date or to_date:
+            if from_date is None or to_date is None:
+                raise DomainExceptionError("from_date and to_date must be provided together")
+            from_date, to_date = validate_date_range(from_date, to_date)
+            period = ReportPeriod.CUSTOM
+        else:
+            from_date, to_date = get_period_bounds(period)
         key = await self._build_cache_key(
             user_id,
             "dashboard",
@@ -198,6 +210,83 @@ class ReportingService:
             breakdown_type=breakdown_type,
             total=total,
             categories=items,
+        )
+        await self.cache.set_json(
+            key,
+            response.model_dump(mode="json"),
+            ttl_seconds=self.settings.report_cache_ttl_seconds,
+        )
+        return response
+
+    async def get_category_trend(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        granularity: ReportGranularity,
+        breakdown_type: CategoryBreakdownType,
+        *,
+        limit: int = 5,
+    ) -> CategoryTrendResponse:
+        from_date, to_date = validate_date_range(from_date, to_date)
+        key = await self._build_cache_key(
+            user_id,
+            "category_trend",
+            {
+                "from_date": from_date.isoformat(),
+                "to_date": to_date.isoformat(),
+                "granularity": granularity.value,
+                "type": breakdown_type.value,
+                "limit": limit,
+            },
+        )
+        cached = await self.cache.get_json(key)
+        if cached is not None:
+            return CategoryTrendResponse.model_validate(cached)
+
+        direction = (
+            TransactionDirection.OUT
+            if breakdown_type == CategoryBreakdownType.EXPENSE
+            else TransactionDirection.IN
+        )
+        top_categories = await self.reporting_repository.get_category_breakdown(
+            user_id,
+            from_date,
+            to_date,
+            direction=direction,
+            limit=limit,
+        )
+        category_ids = [
+            row["category_id"] for row in top_categories if row.get("category_id") is not None
+        ]
+        rows = await self.reporting_repository.get_category_trend(
+            user_id,
+            from_date,
+            to_date,
+            granularity=granularity.value,
+            direction=direction,
+            category_ids=category_ids if category_ids else None,
+        )
+
+        points = [
+            CategoryTrendPoint(
+                period=row["period"],
+                category_id=row["category_id"],
+                category_name=str(row["category_name"]),
+                color=row["color"] if isinstance(row["color"], str) else None,
+                icon=row["icon"] if isinstance(row["icon"], str) else None,
+                amount=Decimal(row["amount"]),
+            )
+            for row in rows
+            if isinstance(row["period"], datetime)
+        ]
+
+        response = CategoryTrendResponse(
+            from_date=from_date,
+            to_date=to_date,
+            granularity=granularity,
+            breakdown_type=breakdown_type,
+            points=points,
         )
         await self.cache.set_json(
             key,

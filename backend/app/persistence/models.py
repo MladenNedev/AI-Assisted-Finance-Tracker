@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -51,6 +53,10 @@ class User(Base):
         cascade="all, delete-orphan",
     )
     budgets: Mapped[list["Budget"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    recurring_transactions: Mapped[list["RecurringTransaction"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -116,6 +122,10 @@ class Account(Base):
         back_populates="account",
         cascade="all, delete-orphan",
     )
+    recurring_transactions: Mapped[list["RecurringTransaction"]] = relationship(
+        back_populates="account",
+        cascade="all, delete-orphan",
+    )
 
 
 class Category(Base):
@@ -148,6 +158,9 @@ class Category(Base):
     user: Mapped[User] = relationship(back_populates="categories")
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="category")
     budgets: Mapped[list["Budget"]] = relationship(back_populates="category")
+    recurring_transactions: Mapped[list["RecurringTransaction"]] = relationship(
+        back_populates="category"
+    )
 
 
 class Budget(Base):
@@ -181,6 +194,9 @@ class Budget(Base):
     )
     month_start: Mapped[date] = mapped_column(Date, nullable=False)
     limit_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    rollover_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -192,11 +208,74 @@ class Budget(Base):
     category: Mapped[Category] = relationship(back_populates="budgets")
 
 
+class RecurringTransaction(Base):
+    __tablename__ = "recurring_transactions"
+    __table_args__ = (
+        Index("ix_recurring_transactions_user_id_next_run_at", "user_id", "next_run_at"),
+        Index("ix_recurring_transactions_account_id", "account_id"),
+        Index("ix_recurring_transactions_active", "user_id", "is_active"),
+        CheckConstraint("amount > 0", name="ck_recurring_transactions_amount_positive"),
+        CheckConstraint(
+            "direction IN ('IN', 'OUT')",
+            name="ck_recurring_transactions_direction_valid",
+        ),
+        CheckConstraint(
+            "cadence IN ('DAILY', 'WEEKLY', 'MONTHLY')",
+            name="ck_recurring_transactions_cadence_valid",
+        ),
+        CheckConstraint(
+            "interval > 0",
+            name="ck_recurring_transactions_interval_positive",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    account_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    category_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    direction: Mapped[str] = mapped_column(String(3), nullable=False)
+    cadence: Mapped[str] = mapped_column(String(10), nullable=False)
+    interval: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    merchant: Mapped[str | None] = mapped_column(String(200))
+    note: Mapped[str | None] = mapped_column(Text)
+    tags: Mapped[list[str] | None] = mapped_column(ARRAY(String(32)))
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    user: Mapped[User] = relationship(back_populates="recurring_transactions")
+    account: Mapped[Account] = relationship(back_populates="recurring_transactions")
+    category: Mapped[Category | None] = relationship(back_populates="recurring_transactions")
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
     __table_args__ = (
         Index("ix_transactions_account_id_occurred_at", "account_id", "occurred_at"),
         Index("ix_transactions_occurred_at", "occurred_at"),
+        Index("ix_transactions_tags", "tags", postgresql_using="gin"),
         CheckConstraint("amount > 0", name="ck_transactions_amount_positive"),
         CheckConstraint("direction IN ('IN', 'OUT')", name="ck_transactions_direction_valid"),
     )
@@ -213,10 +292,14 @@ class Transaction(Base):
         nullable=True,
         index=True,
     )
+    transfer_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     direction: Mapped[str] = mapped_column(String(3), nullable=False)
     merchant: Mapped[str | None] = mapped_column(String(200))
     note: Mapped[str | None] = mapped_column(Text)
+    tags: Mapped[list[str] | None] = mapped_column(ARRAY(String(32)), nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -227,9 +310,71 @@ class Transaction(Base):
 
     account: Mapped[Account] = relationship(back_populates="transactions")
     category: Mapped[Category | None] = relationship(back_populates="transactions")
+    splits: Mapped[list["TransactionSplit"]] = relationship(
+        back_populates="transaction",
+        cascade="all, delete-orphan",
+    )
+    attachments: Mapped[list["TransactionAttachment"]] = relationship(
+        back_populates="transaction",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def signed_amount(self) -> Decimal:
         if self.direction == TransactionDirection.OUT.value:
             return -self.amount
         return self.amount
+
+
+class TransactionSplit(Base):
+    __tablename__ = "transaction_splits"
+    __table_args__ = (
+        Index("ix_transaction_splits_transaction_id", "transaction_id"),
+        Index("ix_transaction_splits_category_id", "category_id"),
+        CheckConstraint("amount > 0", name="ck_transaction_splits_amount_positive"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    transaction_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    category_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    transaction: Mapped[Transaction] = relationship(back_populates="splits")
+    category: Mapped[Category | None] = relationship()
+
+
+class TransactionAttachment(Base):
+    __tablename__ = "transaction_attachments"
+    __table_args__ = (
+        Index("ix_transaction_attachments_transaction_id", "transaction_id"),
+        Index("ix_transaction_attachments_user_id", "user_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    transaction_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    transaction: Mapped[Transaction] = relationship(back_populates="attachments")

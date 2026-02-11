@@ -246,6 +246,23 @@ def test_copy_previous_month_is_idempotent(authenticated_client: TestClient) -> 
     assert listing.json()["total"] == 1
 
 
+def test_budget_summary_returns_series(authenticated_client: TestClient) -> None:
+    category = _create_category(authenticated_client, name="Groceries")
+    month = _current_month()
+    _create_budget(
+        authenticated_client,
+        category_id=category["id"],
+        month=month,
+        limit_amount="300.00",
+    )
+
+    response = authenticated_client.get("/api/v1/budgets/summary?months=1")
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["month"] == month
+
+
 def test_budget_access_is_scoped_per_user(client: TestClient) -> None:
     # User A setup and budget creation.
     first_email = "budget-owner@example.com"

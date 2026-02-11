@@ -36,6 +36,7 @@ import type {
   CashflowTrendResponse,
   CreateTransactionRequest,
   CategoryBreakdownResponse,
+  CategoryTrendResponse,
   DashboardSummaryResponse,
   PaginatedResponse,
   ReportGranularity,
@@ -48,6 +49,7 @@ const PERIOD_OPTIONS: Array<{ value: ReportPeriod; label: string }> = [
   { value: "week", label: "This Week" },
   { value: "month", label: "This Month" },
   { value: "year", label: "This Year" },
+  { value: "custom", label: "Custom Range" },
 ];
 
 const CHART_COLORS = ["#2E86AB", "#F18F01", "#C73E1D", "#5FAD56", "#7D5BA6", "#008B8B"];
@@ -60,6 +62,7 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
   const [cashflow, setCashflow] = useState<CashflowTrendResponse | null>(null);
   const [categories, setCategories] = useState<CategoryBreakdownResponse | null>(null);
+  const [categoryTrend, setCategoryTrend] = useState<CategoryTrendResponse | null>(null);
   const [budgetProgress, setBudgetProgress] = useState<BudgetProgressResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +71,8 @@ export default function Dashboard() {
   const [quickError, setQuickError] = useState<string | null>(null);
   const [quickAccounts, setQuickAccounts] = useState<AccountResponse[]>([]);
   const [quickCategories, setQuickCategories] = useState<CategoryResponse[]>([]);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [quickForm, setQuickForm] = useState({
     account_id: "",
     amount: 0 as number | "",
@@ -79,8 +84,17 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
+    if (period === "custom") {
+      if (customFrom && customTo) {
+        void loadDashboard(period, customFrom, customTo);
+      } else {
+        setError("Select a start and end date for the custom range.");
+        setLoading(false);
+      }
+      return;
+    }
     void loadDashboard(period);
-  }, [period]);
+  }, [period, customFrom, customTo]);
 
   const onLogout = async () => {
     await logout();
@@ -111,6 +125,38 @@ export default function Dashboard() {
       percentage: item.percentage,
     }));
   }, [categories]);
+
+  const categoryTrendSeries = useMemo(() => {
+    if (!categoryTrend) {
+      return { data: [], keys: [] as Array<{ key: string; label: string; color: string }> };
+    }
+    const byPeriod = new Map<string, Record<string, number>>();
+    const labels = new Map<string, { label: string; color: string }>();
+
+    for (const point of categoryTrend.points) {
+      const periodKey = point.period;
+      const entry = byPeriod.get(periodKey) ?? { period: periodKey };
+      const key = point.category_id ?? point.category_name;
+      entry[key] = toNumber(point.amount);
+      byPeriod.set(periodKey, entry);
+      labels.set(key, {
+        label: point.category_name,
+        color: point.color ?? CHART_COLORS[labels.size % CHART_COLORS.length],
+      });
+    }
+
+    const data = Array.from(byPeriod.values()).sort((a, b) => {
+      const left = new Date(String(a.period)).getTime();
+      const right = new Date(String(b.period)).getTime();
+      return left - right;
+    });
+    const keys = Array.from(labels.entries()).map(([key, meta]) => ({
+      key,
+      label: meta.label,
+      color: meta.color,
+    }));
+    return { data, keys };
+  }, [categoryTrend]);
 
   const quickCategoryOptions = useMemo(
     () =>
@@ -143,6 +189,22 @@ export default function Dashboard() {
             data={PERIOD_OPTIONS}
             w={160}
           />
+          {period === "custom" ? (
+            <Group>
+              <TextInput
+                label="From"
+                type="date"
+                value={customFrom}
+                onChange={(event) => setCustomFrom(event.currentTarget.value)}
+              />
+              <TextInput
+                label="To"
+                type="date"
+                value={customTo}
+                onChange={(event) => setCustomTo(event.currentTarget.value)}
+              />
+            </Group>
+          ) : null}
           <Button variant="outline" onClick={openQuickAdd}>
             Quick add
           </Button>
@@ -255,6 +317,42 @@ export default function Dashboard() {
               </Card>
             </Grid.Col>
           </Grid>
+
+          <Card withBorder radius="md" p="lg">
+            <Title order={4} mb="md">
+              Category Trend
+            </Title>
+            {categoryTrendSeries.data.length ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={categoryTrendSeries.data}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="period"
+                    tickFormatter={(value) =>
+                      formatPeriodLabel(String(value), categoryTrend?.granularity ?? "day")
+                    }
+                  />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  {categoryTrendSeries.keys.map((item) => (
+                    <Line
+                      key={item.key}
+                      type="monotone"
+                      dataKey={item.key}
+                      name={item.label}
+                      stroke={item.color}
+                      strokeWidth={2}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <Text c="dimmed" size="sm">
+                No category trend data yet.
+              </Text>
+            )}
+          </Card>
 
           <Card withBorder radius="md" p="lg">
             <Group justify="space-between">
@@ -412,16 +510,28 @@ export default function Dashboard() {
     </Stack>
   );
 
-  async function loadDashboard(selectedPeriod: ReportPeriod) {
+  async function loadDashboard(
+    selectedPeriod: ReportPeriod,
+    customFromDate?: string,
+    customToDate?: string,
+  ) {
     setLoading(true);
     setError(null);
     try {
+      const dashboardParams = new URLSearchParams({
+        period: selectedPeriod,
+      });
+      if (selectedPeriod === "custom" && customFromDate && customToDate) {
+        dashboardParams.set("from_date", `${customFromDate}T00:00:00Z`);
+        dashboardParams.set("to_date", `${customToDate}T23:59:59Z`);
+      }
       const dashboard = await apiFetch<DashboardSummaryResponse>(
-        `/reporting/dashboard?period=${selectedPeriod}`,
+        `/reporting/dashboard?${dashboardParams.toString()}`,
       );
       setSummary(dashboard);
 
-      const granularity: ReportGranularity = selectedPeriod === "year" ? "month" : "day";
+      const granularity: ReportGranularity =
+        selectedPeriod === "year" ? "month" : selectedPeriod === "month" ? "week" : "day";
       const [cashflowData, categoryData] = await Promise.all([
         apiFetch<CashflowTrendResponse>(
           `/reporting/cashflow?from_date=${encodeURIComponent(
@@ -436,6 +546,13 @@ export default function Dashboard() {
       ]);
       setCashflow(cashflowData);
       setCategories(categoryData);
+
+      const trendData = await apiFetch<CategoryTrendResponse>(
+        `/reporting/category-trend?from_date=${encodeURIComponent(
+          dashboard.from_date,
+        )}&to_date=${encodeURIComponent(dashboard.to_date)}&granularity=${granularity}&breakdown_type=expense&limit=5`,
+      );
+      setCategoryTrend(trendData);
 
       try {
         const budgetProgressData = await apiFetch<BudgetProgressResponse>(
