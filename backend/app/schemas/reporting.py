@@ -57,3 +57,20 @@ class CategoryBreakdownResponse(BaseModel):
     breakdown_type: CategoryBreakdownType
     total: Decimal
     categories: list[CategoryBreakdownItem]
+
+
+class CategoryTrendPoint(BaseModel):
+    period: datetime
+    category_id: UUID | None
+    category_name: str
+    color: str | None
+    icon: str | None
+    amount: Decimal
+
+
+class CategoryTrendResponse(BaseModel):
+    from_date: datetime
+    to_date: datetime
+    granularity: ReportGranularity
+    breakdown_type: CategoryBreakdownType
+    points: list[CategoryTrendPoint]
