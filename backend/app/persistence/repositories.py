@@ -2,11 +2,22 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Select, case, func, or_, select
+from sqlalchemy import Select, case, exists, func, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.domain.money import TransactionDirection
-from app.persistence.models import Account, AuthSession, Budget, Category, Transaction, User
+from app.persistence.models import (
+    Account,
+    AuthSession,
+    Budget,
+    Category,
+    RecurringTransaction,
+    Transaction,
+    TransactionAttachment,
+    TransactionSplit,
+    User,
+)
 
 
 class UserRepository:
@@ -168,15 +179,19 @@ class TransactionRepository:
         occurred_at: datetime,
         merchant: str | None,
         note: str | None,
+        tags: list[str] | None = None,
+        transfer_id: UUID | None = None,
     ) -> Transaction:
         transaction = Transaction(
             account_id=account_id,
             category_id=category_id,
+            transfer_id=transfer_id,
             amount=amount,
             direction=direction,
             occurred_at=occurred_at,
             merchant=merchant,
             note=note,
+            tags=tags,
         )
         self.session.add(transaction)
         await self.session.flush()
@@ -187,6 +202,10 @@ class TransactionRepository:
             select(Transaction)
             .join(Account, Account.id == Transaction.account_id)
             .where(Transaction.id == transaction_id, Account.user_id == user_id)
+            .options(
+                selectinload(Transaction.splits),
+                selectinload(Transaction.attachments),
+            )
         )
         return await self.session.scalar(stmt)
 
@@ -196,6 +215,7 @@ class TransactionRepository:
         *,
         account_id: UUID | None = None,
         category_id: UUID | None = None,
+        tag: str | None = None,
         occurred_from: datetime | None = None,
         occurred_to: datetime | None = None,
         search: str | None = None,
@@ -208,7 +228,17 @@ class TransactionRepository:
         if account_id is not None:
             stmt = stmt.where(Transaction.account_id == account_id)
         if category_id is not None:
-            stmt = stmt.where(Transaction.category_id == category_id)
+            split_subquery = select(TransactionSplit.transaction_id).where(
+                TransactionSplit.category_id == category_id
+            )
+            stmt = stmt.where(
+                or_(
+                    Transaction.category_id == category_id,
+                    Transaction.id.in_(split_subquery),
+                )
+            )
+        if tag:
+            stmt = stmt.where(Transaction.tags.any(tag))
         if occurred_from is not None:
             stmt = stmt.where(Transaction.occurred_at >= occurred_from)
         if occurred_to is not None:
@@ -229,6 +259,7 @@ class TransactionRepository:
         *,
         account_id: UUID | None = None,
         category_id: UUID | None = None,
+        tag: str | None = None,
         occurred_from: datetime | None = None,
         occurred_to: datetime | None = None,
         search: str | None = None,
@@ -239,11 +270,16 @@ class TransactionRepository:
             user_id=user_id,
             account_id=account_id,
             category_id=category_id,
+            tag=tag,
             occurred_from=occurred_from,
             occurred_to=occurred_to,
             search=search,
         )
         stmt = stmt.order_by(Transaction.occurred_at.desc(), Transaction.created_at.desc())
+        stmt = stmt.options(
+            selectinload(Transaction.splits),
+            selectinload(Transaction.attachments),
+        )
         stmt = stmt.limit(limit).offset(offset)
         rows = await self.session.scalars(stmt)
         return list(rows.all())
@@ -254,6 +290,7 @@ class TransactionRepository:
         *,
         account_id: UUID | None = None,
         category_id: UUID | None = None,
+        tag: str | None = None,
         occurred_from: datetime | None = None,
         occurred_to: datetime | None = None,
         search: str | None = None,
@@ -262,6 +299,7 @@ class TransactionRepository:
             user_id=user_id,
             account_id=account_id,
             category_id=category_id,
+            tag=tag,
             occurred_from=occurred_from,
             occurred_to=occurred_to,
             search=search,
@@ -290,6 +328,120 @@ class TransactionRepository:
         await self.session.delete(transaction)
         await self.session.flush()
         return True
+
+    async def bulk_update_category(
+        self,
+        user_id: UUID,
+        transaction_ids: list[UUID],
+        category_id: UUID | None,
+    ) -> int:
+        if not transaction_ids:
+            return 0
+        allowed_ids = (
+            select(Transaction.id)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(Account.user_id == user_id, Transaction.id.in_(transaction_ids))
+            .subquery()
+        )
+        stmt = (
+            Transaction.__table__.update()
+            .where(Transaction.id.in_(select(allowed_ids.c.id)))
+            .values(category_id=category_id)
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return int(result.rowcount or 0)
+
+
+class RecurringTransactionRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def create(self, recurring: RecurringTransaction) -> RecurringTransaction:
+        self.session.add(recurring)
+        await self.session.flush()
+        return recurring
+
+    async def get_by_id(
+        self, recurring_id: UUID, user_id: UUID
+    ) -> RecurringTransaction | None:
+        stmt = select(RecurringTransaction).where(
+            RecurringTransaction.id == recurring_id,
+            RecurringTransaction.user_id == user_id,
+        )
+        return await self.session.scalar(stmt)
+
+    async def list_by_user(
+        self,
+        user_id: UUID,
+        *,
+        active_only: bool = False,
+    ) -> list[RecurringTransaction]:
+        stmt = select(RecurringTransaction).where(RecurringTransaction.user_id == user_id)
+        if active_only:
+            stmt = stmt.where(RecurringTransaction.is_active.is_(True))
+        stmt = stmt.order_by(RecurringTransaction.next_run_at.asc())
+        rows = await self.session.scalars(stmt)
+        return list(rows.all())
+
+    async def list_due(
+        self,
+        user_id: UUID,
+        now: datetime,
+        *,
+        limit: int = 100,
+    ) -> list[RecurringTransaction]:
+        stmt = (
+            select(RecurringTransaction)
+            .where(
+                RecurringTransaction.user_id == user_id,
+                RecurringTransaction.is_active.is_(True),
+                RecurringTransaction.next_run_at <= now,
+            )
+            .order_by(RecurringTransaction.next_run_at.asc())
+            .limit(limit)
+        )
+        rows = await self.session.scalars(stmt)
+        return list(rows.all())
+
+    async def delete(self, recurring: RecurringTransaction) -> None:
+        await self.session.delete(recurring)
+
+
+class TransactionAttachmentRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def create(self, attachment: TransactionAttachment) -> TransactionAttachment:
+        self.session.add(attachment)
+        await self.session.flush()
+        return attachment
+
+    async def list_by_transaction(
+        self, transaction_id: UUID, user_id: UUID
+    ) -> list[TransactionAttachment]:
+        stmt = select(TransactionAttachment).where(
+            TransactionAttachment.transaction_id == transaction_id,
+            TransactionAttachment.user_id == user_id,
+        )
+        rows = await self.session.scalars(stmt)
+        return list(rows.all())
+
+    async def get_by_id(
+        self,
+        attachment_id: UUID,
+        transaction_id: UUID,
+        user_id: UUID,
+    ) -> TransactionAttachment | None:
+        stmt = select(TransactionAttachment).where(
+            TransactionAttachment.id == attachment_id,
+            TransactionAttachment.transaction_id == transaction_id,
+            TransactionAttachment.user_id == user_id,
+        )
+        return await self.session.scalar(stmt)
+
+    async def delete(self, attachment: TransactionAttachment) -> None:
+        await self.session.delete(attachment)
 
 
 class CategoryRepository:
@@ -362,6 +514,59 @@ class CategoryRepository:
         return True
 
 
+def _category_amounts_subquery(
+    *,
+    user_id: UUID,
+    direction: TransactionDirection,
+    occurred_from: datetime,
+    occurred_to: datetime,
+    category_ids: list[UUID] | None = None,
+) -> Select[tuple[UUID | None, Decimal]]:
+    split_stmt = (
+        select(
+            TransactionSplit.category_id.label("category_id"),
+            func.coalesce(func.sum(TransactionSplit.amount), Decimal("0")).label("amount"),
+        )
+        .select_from(TransactionSplit)
+        .join(Transaction, Transaction.id == TransactionSplit.transaction_id)
+        .join(Account, Account.id == Transaction.account_id)
+        .where(
+            Account.user_id == user_id,
+            Transaction.direction == direction.value,
+            Transaction.occurred_at >= occurred_from,
+            Transaction.occurred_at < occurred_to,
+        )
+        .group_by(TransactionSplit.category_id)
+    )
+
+    no_split_stmt = (
+        select(
+            Transaction.category_id.label("category_id"),
+            func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("amount"),
+        )
+        .select_from(Transaction)
+        .join(Account, Account.id == Transaction.account_id)
+        .where(
+            Account.user_id == user_id,
+            Transaction.direction == direction.value,
+            Transaction.occurred_at >= occurred_from,
+            Transaction.occurred_at < occurred_to,
+            Transaction.category_id.is_not(None),
+            ~exists().where(TransactionSplit.transaction_id == Transaction.id),
+        )
+        .group_by(Transaction.category_id)
+    )
+
+    combined = union_all(split_stmt, no_split_stmt).subquery()
+    stmt = select(
+        combined.c.category_id,
+        func.coalesce(func.sum(combined.c.amount), Decimal("0")).label("amount"),
+    ).group_by(combined.c.category_id)
+    if category_ids:
+        stmt = stmt.where(combined.c.category_id.in_(category_ids))
+    return stmt
+
+
 class BudgetRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -372,12 +577,14 @@ class BudgetRepository:
         category_id: UUID,
         month_start: date,
         limit_amount: Decimal,
+        rollover_enabled: bool,
     ) -> Budget:
         budget = Budget(
             user_id=user_id,
             category_id=category_id,
             month_start=month_start,
             limit_amount=limit_amount,
+            rollover_enabled=rollover_enabled,
         )
         self.session.add(budget)
         await self.session.flush()
@@ -435,16 +642,52 @@ class BudgetRepository:
         )
         return int(await self.session.scalar(stmt) or 0)
 
-    async def update_limit(
+    async def sum_limits_for_month(self, user_id: UUID, month_start: date) -> Decimal:
+        stmt = select(func.coalesce(func.sum(Budget.limit_amount), Decimal("0"))).where(
+            Budget.user_id == user_id, Budget.month_start == month_start
+        )
+        return Decimal(await self.session.scalar(stmt) or 0)
+
+    async def sum_spent_for_month(
+        self,
+        user_id: UUID,
+        month_start: date,
+        occurred_from: datetime,
+        occurred_to: datetime,
+    ) -> Decimal:
+        spent_subquery = _category_amounts_subquery(
+            user_id=user_id,
+            direction=TransactionDirection.OUT,
+            occurred_from=occurred_from,
+            occurred_to=occurred_to,
+        ).subquery()
+        stmt = (
+            select(func.coalesce(func.sum(spent_subquery.c.amount), Decimal("0")))
+            .select_from(spent_subquery)
+            .join(
+                Budget,
+                (Budget.category_id == spent_subquery.c.category_id)
+                & (Budget.user_id == user_id)
+                & (Budget.month_start == month_start),
+            )
+        )
+        return Decimal(await self.session.scalar(stmt) or 0)
+
+    async def update(
         self,
         budget_id: UUID,
         user_id: UUID,
-        limit_amount: Decimal,
+        *,
+        limit_amount: Decimal | None = None,
+        rollover_enabled: bool | None = None,
     ) -> Budget | None:
         budget = await self.get_by_id(budget_id, user_id)
         if budget is None:
             return None
-        budget.limit_amount = limit_amount
+        if limit_amount is not None:
+            budget.limit_amount = limit_amount
+        if rollover_enabled is not None:
+            budget.rollover_enabled = rollover_enabled
         await self.session.flush()
         return budget
 
@@ -463,23 +706,12 @@ class BudgetRepository:
         occurred_from: datetime,
         occurred_to: datetime,
     ) -> list[dict[str, object]]:
-        spent_subquery = (
-            select(
-                Transaction.category_id.label("category_id"),
-                func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("spent_amount"),
-            )
-            .select_from(Transaction)
-            .join(Account, Account.id == Transaction.account_id)
-            .where(
-                Account.user_id == user_id,
-                Transaction.category_id.is_not(None),
-                Transaction.direction == TransactionDirection.OUT.value,
-                Transaction.occurred_at >= occurred_from,
-                Transaction.occurred_at < occurred_to,
-            )
-            .group_by(Transaction.category_id)
-            .subquery()
-        )
+        spent_subquery = _category_amounts_subquery(
+            user_id=user_id,
+            direction=TransactionDirection.OUT,
+            occurred_from=occurred_from,
+            occurred_to=occurred_to,
+        ).subquery()
 
         stmt = (
             select(
@@ -487,10 +719,11 @@ class BudgetRepository:
                 Budget.category_id.label("category_id"),
                 Budget.month_start.label("month_start"),
                 Budget.limit_amount.label("limit_amount"),
+                Budget.rollover_enabled.label("rollover_enabled"),
                 Category.name.label("category_name"),
                 Category.color.label("category_color"),
                 Category.icon.label("category_icon"),
-                func.coalesce(spent_subquery.c.spent_amount, Decimal("0")).label("spent_amount"),
+                func.coalesce(spent_subquery.c.amount, Decimal("0")).label("spent_amount"),
             )
             .select_from(Budget)
             .join(Category, Category.id == Budget.category_id)
@@ -505,6 +738,7 @@ class BudgetRepository:
                 "category_id": row.category_id,
                 "month_start": row.month_start,
                 "limit_amount": Decimal(row.limit_amount),
+                "rollover_enabled": bool(row.rollover_enabled),
                 "category_name": row.category_name,
                 "category_color": row.category_color,
                 "category_icon": row.category_icon,
@@ -638,7 +872,13 @@ class ReportingRepository:
         direction: TransactionDirection,
         limit: int,
     ) -> list[dict[str, object]]:
-        amount_expr = func.coalesce(func.sum(Transaction.amount), Decimal("0"))
+        amounts_subquery = _category_amounts_subquery(
+            user_id=user_id,
+            direction=direction,
+            occurred_from=from_date,
+            occurred_to=to_date,
+        ).subquery()
+        amount_expr = func.coalesce(amounts_subquery.c.amount, Decimal("0"))
         stmt = (
             select(
                 Category.id.label("category_id"),
@@ -647,16 +887,8 @@ class ReportingRepository:
                 Category.icon,
                 amount_expr.label("amount"),
             )
-            .select_from(Transaction)
-            .join(Account, Account.id == Transaction.account_id)
-            .outerjoin(Category, Category.id == Transaction.category_id)
-            .where(
-                Account.user_id == user_id,
-                Transaction.direction == direction.value,
-                Transaction.occurred_at >= from_date,
-                Transaction.occurred_at < to_date,
-            )
-            .group_by(Category.id, Category.name, Category.color, Category.icon)
+            .select_from(amounts_subquery)
+            .outerjoin(Category, Category.id == amounts_subquery.c.category_id)
             .order_by(amount_expr.desc())
             .limit(limit)
         )
@@ -718,6 +950,93 @@ class ReportingRepository:
                 "account_type": row.account_type,
                 "currency": row.currency,
                 "balance": Decimal(row.opening_balance) + Decimal(row.movement or 0),
+            }
+            for row in rows
+        ]
+
+    async def get_category_trend(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        *,
+        granularity: str,
+        direction: TransactionDirection,
+        category_ids: list[UUID] | None = None,
+    ) -> list[dict[str, object]]:
+        if granularity == "week":
+            period_expr = func.date_trunc("week", Transaction.occurred_at)
+        elif granularity == "month":
+            period_expr = func.date_trunc("month", Transaction.occurred_at)
+        else:
+            period_expr = func.date_trunc("day", Transaction.occurred_at)
+
+        split_stmt = (
+            select(
+                period_expr.label("period"),
+                TransactionSplit.category_id.label("category_id"),
+                func.coalesce(func.sum(TransactionSplit.amount), Decimal("0")).label("amount"),
+            )
+            .select_from(TransactionSplit)
+            .join(Transaction, Transaction.id == TransactionSplit.transaction_id)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(
+                Account.user_id == user_id,
+                Transaction.direction == direction.value,
+                Transaction.occurred_at >= from_date,
+                Transaction.occurred_at < to_date,
+            )
+            .group_by(period_expr, TransactionSplit.category_id)
+        )
+
+        no_split_stmt = (
+            select(
+                period_expr.label("period"),
+                Transaction.category_id.label("category_id"),
+                func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("amount"),
+            )
+            .select_from(Transaction)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(
+                Account.user_id == user_id,
+                Transaction.direction == direction.value,
+                Transaction.occurred_at >= from_date,
+                Transaction.occurred_at < to_date,
+                Transaction.category_id.is_not(None),
+                ~exists().where(TransactionSplit.transaction_id == Transaction.id),
+            )
+            .group_by(period_expr, Transaction.category_id)
+        )
+
+        combined = union_all(split_stmt, no_split_stmt).subquery()
+        amount_expr = func.coalesce(func.sum(combined.c.amount), Decimal("0"))
+        stmt = (
+            select(
+                combined.c.period.label("period"),
+                Category.id.label("category_id"),
+                Category.name.label("category_name"),
+                Category.color,
+                Category.icon,
+                amount_expr.label("amount"),
+            )
+            .select_from(combined)
+            .outerjoin(Category, Category.id == combined.c.category_id)
+        )
+        if category_ids:
+            stmt = stmt.where(combined.c.category_id.in_(category_ids))
+        stmt = stmt.group_by(
+            combined.c.period, Category.id, Category.name, Category.color, Category.icon
+        )
+        stmt = stmt.order_by(combined.c.period.asc(), amount_expr.desc())
+        rows = (await self.session.execute(stmt)).all()
+        return [
+            {
+                "period": row.period,
+                "category_id": row.category_id,
+                "category_name": row.category_name or "Uncategorized",
+                "color": row.color,
+                "icon": row.icon,
+                "amount": Decimal(row.amount or 0),
             }
             for row in rows
         ]

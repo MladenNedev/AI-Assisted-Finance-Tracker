@@ -46,3 +46,35 @@ def normalize_note(note: str | None) -> str | None:
         return None
     normalized = note.strip()
     return normalized or None
+
+
+def normalize_split_amount(amount: Decimal) -> Decimal:
+    normalized = quantize_money(amount)
+    if normalized <= 0:
+        raise DomainExceptionError("Split amount must be positive")
+    return normalized
+
+
+def normalize_tags(tags: list[str] | None) -> list[str] | None:
+    if tags is None:
+        return None
+    if not tags:
+        return None
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for tag in tags:
+        if tag is None:
+            continue
+        candidate = str(tag).strip()
+        if not candidate:
+            continue
+        if len(candidate) > 32:
+            raise DomainExceptionError("Tags must be 32 characters or fewer")
+        key = candidate.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(key)
+    if len(normalized) > 20:
+        raise DomainExceptionError("No more than 20 tags are allowed")
+    return normalized or None

@@ -51,6 +51,18 @@ class CategoryNotFoundError(ResourceNotFoundError):
     code = "category_not_found"
 
 
+class RecurringNotFoundError(ResourceNotFoundError):
+    code = "recurring_not_found"
+
+
+class AttachmentNotFoundError(ResourceNotFoundError):
+    code = "attachment_not_found"
+
+
+class SplitValidationError(DomainExceptionError):
+    code = "split_validation_error"
+
+
 class CategoryAlreadyExistsError(DomainExceptionError):
     status_code = 409
     code = "category_already_exists"

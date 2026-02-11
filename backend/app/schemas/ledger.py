@@ -117,6 +117,8 @@ class TransactionCreateRequest(BaseModel):
     occurred_at: datetime
     merchant: str | None = Field(default=None, max_length=200)
     note: str | None = None
+    tags: list[str] | None = None
+    splits: list["TransactionSplitRequest"] | None = None
 
     @field_validator("amount")
     @classmethod
@@ -131,6 +133,8 @@ class TransactionUpdateRequest(BaseModel):
     occurred_at: datetime | None = None
     merchant: str | None = Field(default=None, max_length=200)
     note: str | None = None
+    tags: list[str] | None = None
+    splits: list["TransactionSplitRequest"] | None = None
 
     @field_validator("amount")
     @classmethod
@@ -146,15 +150,94 @@ class TransactionResponse(BaseModel):
     id: UUID
     account_id: UUID
     category_id: UUID | None
+    transfer_id: UUID | None
     amount: Decimal
     direction: TransactionDirection
     signed_amount: Decimal
     merchant: str | None
     note: str | None
+    tags: list[str] | None
+    splits: list["TransactionSplitResponse"] | None = None
+    attachments: list["TransactionAttachmentResponse"] | None = None
     occurred_at: datetime
     created_at: datetime
     updated_at: datetime
 
 
+class TransactionSplitRequest(BaseModel):
+    category_id: UUID | None = None
+    amount: Decimal = Field(gt=0)
+    note: str | None = None
+
+    @field_validator("amount")
+    @classmethod
+    def normalize_amount(cls, value: Decimal) -> Decimal:
+        return quantize_money(value)
+
+
+class TransactionSplitResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    category_id: UUID | None
+    amount: Decimal
+    note: str | None
+    created_at: datetime
+
+
+class TransactionAttachmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    filename: str
+    content_type: str
+    size_bytes: int
+    created_at: datetime
+
+
 class TransactionListResponse(PaginatedResponse):
     items: list[TransactionResponse]
+
+
+class TransferCreateRequest(BaseModel):
+    from_account_id: UUID
+    to_account_id: UUID
+    amount: Decimal = Field(gt=0)
+    occurred_at: datetime
+    note: str | None = None
+
+    @field_validator("amount")
+    @classmethod
+    def normalize_amount(cls, value: Decimal) -> Decimal:
+        return quantize_money(value)
+
+
+class TransferResponse(BaseModel):
+    transfer_id: UUID
+    outgoing: TransactionResponse
+    incoming: TransactionResponse
+
+
+class TransactionBulkCategoryRequest(BaseModel):
+    transaction_ids: list[UUID] = Field(min_length=1, max_length=200)
+    category_id: UUID | None = None
+
+
+class TransactionBulkCategoryResponse(BaseModel):
+    updated_count: int
+
+
+class TransactionImportError(BaseModel):
+    row: int
+    message: str
+
+
+class TransactionImportResponse(BaseModel):
+    imported: int
+    skipped: int
+    errors: list[TransactionImportError]
+
+
+TransactionCreateRequest.model_rebuild()
+TransactionUpdateRequest.model_rebuild()
+TransactionResponse.model_rebuild()
