@@ -135,7 +135,9 @@ class RecurringTransactionService:
         is_active = updates.get("is_active", _UNSET)
 
         if category_id is not _UNSET:
-            await self._ensure_category_access(user_id, category_id if isinstance(category_id, UUID) else None)
+            await self._ensure_category_access(
+                user_id, category_id if isinstance(category_id, UUID) else None
+            )
             recurring.category_id = category_id if isinstance(category_id, UUID) else None
 
         if amount is not _UNSET:
@@ -165,7 +167,9 @@ class RecurringTransactionService:
             recurring.interval = interval_value
         if start_at is not _UNSET:
             start_value = normalize_start_at(
-                start_at if isinstance(start_at, datetime) else datetime.fromisoformat(str(start_at))
+                start_at
+                if isinstance(start_at, datetime)
+                else datetime.fromisoformat(str(start_at))
             )
             recurring.start_at = start_value
         if end_at is not _UNSET:

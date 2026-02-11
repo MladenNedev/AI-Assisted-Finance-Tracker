@@ -1,6 +1,15 @@
 from fastapi import APIRouter
 
-from app.api.v1 import accounts, auth, budgets, categories, health, recurring, reporting, transactions
+from app.api.v1 import (
+    accounts,
+    auth,
+    budgets,
+    categories,
+    health,
+    recurring,
+    reporting,
+    transactions,
+)
 
 api_router = APIRouter()
 api_router.include_router(health.router)

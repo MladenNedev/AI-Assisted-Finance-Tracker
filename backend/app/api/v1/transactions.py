@@ -7,12 +7,12 @@ from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, statu
 from fastapi.responses import FileResponse
 
 from app.api.deps import get_current_user, get_transaction_service
-from app.persistence.models import User
 from app.core.config import get_settings
+from app.persistence.models import User
 from app.schemas.ledger import (
+    TransactionAttachmentResponse,
     TransactionBulkCategoryRequest,
     TransactionBulkCategoryResponse,
-    TransactionAttachmentResponse,
     TransactionCreateRequest,
     TransactionImportResponse,
     TransactionListResponse,
@@ -198,7 +198,9 @@ async def download_attachment(
     )
 
 
-@router.delete("/{transaction_id}/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{transaction_id}/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT
+)
 async def delete_attachment(
     transaction_id: UUID,
     attachment_id: UUID,

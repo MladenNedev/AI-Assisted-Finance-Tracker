@@ -439,13 +439,9 @@ class TransactionService:
 
         if splits is _UNSET and existing.splits:
             if category_id is not _UNSET and category_id is not None:
-                raise DomainExceptionError(
-                    "Clear splits before assigning a transaction category"
-                )
+                raise DomainExceptionError("Clear splits before assigning a transaction category")
             if "amount" in updates:
-                raise DomainExceptionError(
-                    "Update splits when changing the transaction amount"
-                )
+                raise DomainExceptionError("Update splits when changing the transaction amount")
 
         if splits is not _UNSET:
             if splits:
@@ -570,9 +566,7 @@ class TransactionService:
         if category is None:
             raise CategoryNotFoundError("Category not found")
 
-    async def _ensure_transaction_access(
-        self, user_id: UUID, transaction_id: UUID
-    ) -> Transaction:
+    async def _ensure_transaction_access(self, user_id: UUID, transaction_id: UUID) -> Transaction:
         transaction = await self.transaction_repository.get_by_id(transaction_id, user_id)
         if transaction is None:
             raise TransactionNotFoundError("Transaction not found")

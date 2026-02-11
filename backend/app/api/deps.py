@@ -111,7 +111,9 @@ def get_transaction_service(
     account_repository: Annotated[AccountRepository, Depends(get_account_repository)],
     transaction_repository: Annotated[TransactionRepository, Depends(get_transaction_repository)],
     category_repository: Annotated[CategoryRepository, Depends(get_category_repository)],
-    attachment_repository: Annotated[TransactionAttachmentRepository, Depends(get_attachment_repository)],
+    attachment_repository: Annotated[
+        TransactionAttachmentRepository, Depends(get_attachment_repository)
+    ],
 ) -> TransactionService:
     return TransactionService(
         session=session,

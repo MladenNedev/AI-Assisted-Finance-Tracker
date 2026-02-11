@@ -362,9 +362,7 @@ class RecurringTransactionRepository:
         await self.session.flush()
         return recurring
 
-    async def get_by_id(
-        self, recurring_id: UUID, user_id: UUID
-    ) -> RecurringTransaction | None:
+    async def get_by_id(self, recurring_id: UUID, user_id: UUID) -> RecurringTransaction | None:
         stmt = select(RecurringTransaction).where(
             RecurringTransaction.id == recurring_id,
             RecurringTransaction.user_id == user_id,
