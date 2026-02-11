@@ -230,6 +230,31 @@ def test_reporting_net_worth_trend(authenticated_client: TestClient) -> None:
     assert last_balance >= Decimal("100.00")
 
 
+def test_reporting_export_cashflow_csv(authenticated_client: TestClient) -> None:
+    account = _create_account(authenticated_client)
+    now = datetime.now(UTC)
+    _create_transaction(
+        authenticated_client,
+        account["id"],
+        amount="30.00",
+        direction="OUT",
+        occurred_at=now - timedelta(days=1),
+    )
+
+    response = authenticated_client.get(
+        "/api/v1/reporting/export",
+        params={
+            "report_type": "cashflow",
+            "from_date": (now - timedelta(days=2)).isoformat(),
+            "to_date": now.isoformat(),
+            "granularity": "day",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "period,income,expenses,net" in response.text
+
+
 def test_reporting_cache_invalidation_on_transaction_write(
     authenticated_client: TestClient,
 ) -> None:

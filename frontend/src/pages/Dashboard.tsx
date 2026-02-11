@@ -29,7 +29,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ApiError, apiFetch } from "../api/client";
+import { API_BASE_URL, ApiError, apiFetch } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import type {
   BudgetProgressResponse,
@@ -55,6 +55,13 @@ const PERIOD_OPTIONS: Array<{ value: ReportPeriod; label: string }> = [
 
 const CHART_COLORS = ["#2E86AB", "#F18F01", "#C73E1D", "#5FAD56", "#7D5BA6", "#008B8B"];
 
+const EXPORT_OPTIONS = [
+  { value: "dashboard", label: "Dashboard summary" },
+  { value: "cashflow", label: "Cashflow trend" },
+  { value: "categories", label: "Category breakdown" },
+  { value: "category_trend", label: "Category trend" },
+];
+
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -68,6 +75,9 @@ export default function Dashboard() {
   const [budgetProgress, setBudgetProgress] = useState<BudgetProgressResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportType, setExportType] = useState<string>("cashflow");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSubmitting, setQuickSubmitting] = useState(false);
   const [quickError, setQuickError] = useState<string | null>(null);
@@ -102,6 +112,12 @@ export default function Dashboard() {
     await logout();
     navigate("/login", { replace: true });
   };
+
+  const exportGranularity = useMemo(
+    () =>
+      period === "year" ? "month" : period === "month" ? "week" : "day",
+    [period],
+  );
 
   const cashflowSeries = useMemo(() => {
     if (!cashflow) {
@@ -217,6 +233,15 @@ export default function Dashboard() {
               />
             </Group>
           ) : null}
+          <Select
+            value={exportType}
+            onChange={(value) => setExportType(value ?? "cashflow")}
+            data={EXPORT_OPTIONS}
+            w={180}
+          />
+          <Button variant="light" onClick={onExportCsv} loading={exporting} disabled={!summary}>
+            Export CSV
+          </Button>
           <Button variant="outline" onClick={openQuickAdd}>
             Quick add
           </Button>
@@ -233,6 +258,12 @@ export default function Dashboard() {
       {error ? (
         <Alert color="red" title="Failed to load dashboard">
           {error}
+        </Alert>
+      ) : null}
+
+      {exportError ? (
+        <Alert color="red" title="Export failed">
+          {exportError}
         </Alert>
       ) : null}
 
@@ -605,6 +636,61 @@ export default function Dashboard() {
       setError(getErrorMessage(requestError));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onExportCsv() {
+    if (!summary) {
+      setExportError("Load dashboard data before exporting.");
+      return;
+    }
+
+    setExporting(true);
+    setExportError(null);
+
+    try {
+      const params = new URLSearchParams({
+        report_type: exportType,
+        period,
+      });
+      if (exportType !== "dashboard") {
+        params.set("from_date", summary.from_date);
+        params.set("to_date", summary.to_date);
+        params.set("granularity", exportGranularity);
+      } else if (period === "custom") {
+        params.set("from_date", summary.from_date);
+        params.set("to_date", summary.to_date);
+      }
+      if (exportType === "categories") {
+        params.set("breakdown_type", "expense");
+        params.set("limit", "8");
+      }
+      if (exportType === "category_trend") {
+        params.set("breakdown_type", "expense");
+        params.set("granularity", exportGranularity);
+        params.set("limit", "5");
+      }
+
+      const response = await fetch(`${API_BASE_URL}/reporting/export?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        setExportError(`Export failed (${response.status})`);
+        return;
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${exportType}_${summary.from_date.slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (requestError) {
+      setExportError(getErrorMessage(requestError));
+    } finally {
+      setExporting(false);
     }
   }
 

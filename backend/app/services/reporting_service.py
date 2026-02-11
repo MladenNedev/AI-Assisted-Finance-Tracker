@@ -1,3 +1,5 @@
+import csv
+import io
 from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
@@ -352,6 +354,123 @@ class ReportingService:
             ttl_seconds=self.settings.report_cache_ttl_seconds,
         )
         return response
+
+    async def export_dashboard_csv(
+        self,
+        user_id: UUID,
+        period: ReportPeriod,
+        *,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> str:
+        summary = await self.get_dashboard_summary(
+            user_id,
+            period,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["section", "name", "value", "currency", "account_type"])
+        writer.writerow(["summary", "income", str(summary.income), "", ""])
+        writer.writerow(["summary", "expenses", str(summary.expenses), "", ""])
+        writer.writerow(["summary", "net", str(summary.net), "", ""])
+        writer.writerow(["summary", "total_balance", str(summary.total_balance), "", ""])
+        writer.writerow(["summary", "account_count", str(summary.account_count), "", ""])
+        for account in summary.accounts:
+            writer.writerow(
+                [
+                    "account",
+                    account.account_name,
+                    str(account.balance),
+                    account.currency,
+                    account.account_type,
+                ]
+            )
+        return output.getvalue()
+
+    async def export_cashflow_csv(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        granularity: ReportGranularity,
+    ) -> str:
+        response = await self.get_cashflow_trend(user_id, from_date, to_date, granularity)
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["period", "income", "expenses", "net"])
+        for point in response.points:
+            writer.writerow(
+                [
+                    point.period.isoformat(),
+                    str(point.income),
+                    str(point.expenses),
+                    str(point.net),
+                ]
+            )
+        return output.getvalue()
+
+    async def export_category_breakdown_csv(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        breakdown_type: CategoryBreakdownType,
+        *,
+        limit: int = 10,
+    ) -> str:
+        response = await self.get_category_breakdown(
+            user_id, from_date, to_date, breakdown_type, limit=limit
+        )
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["category_name", "amount", "percentage", "category_id", "color", "icon"])
+        for item in response.categories:
+            writer.writerow(
+                [
+                    item.category_name,
+                    str(item.amount),
+                    f"{item.percentage:.2f}",
+                    item.category_id or "",
+                    item.color or "",
+                    item.icon or "",
+                ]
+            )
+        return output.getvalue()
+
+    async def export_category_trend_csv(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        granularity: ReportGranularity,
+        breakdown_type: CategoryBreakdownType,
+        *,
+        limit: int = 5,
+    ) -> str:
+        response = await self.get_category_trend(
+            user_id,
+            from_date,
+            to_date,
+            granularity,
+            breakdown_type,
+            limit=limit,
+        )
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["period", "category_name", "amount", "category_id", "color"])
+        for point in response.points:
+            writer.writerow(
+                [
+                    point.period.isoformat(),
+                    point.category_name,
+                    str(point.amount),
+                    point.category_id or "",
+                    point.color or "",
+                ]
+            )
+        return output.getvalue()
 
     async def invalidate_user_cache(self, user_id: UUID) -> None:
         await self.cache.bump_user_report_version(user_id)

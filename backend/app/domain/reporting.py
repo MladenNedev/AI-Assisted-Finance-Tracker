@@ -23,6 +23,14 @@ class CategoryBreakdownType(StrEnum):
     INCOME = "income"
 
 
+class ReportExportType(StrEnum):
+    DASHBOARD = "dashboard"
+    CASHFLOW = "cashflow"
+    CATEGORIES = "categories"
+    CATEGORY_TREND = "category_trend"
+    NET_WORTH = "net_worth"
+
+
 def normalize_report_datetime(value: datetime) -> datetime:
     normalized = value if value.tzinfo else value.replace(tzinfo=UTC)
     return normalized.astimezone(UTC)
