@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
@@ -6,9 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.cache import cache
 from app.core.exceptions import AccountNotFoundError
 from app.domain.account import (
+    normalize_account_color,
+    normalize_account_icon,
+    normalize_goal_name,
     validate_account_currency,
     validate_account_name,
     validate_account_type,
+    validate_goal_target_amount,
+    validate_goal_target_date,
     validate_opening_balance,
 )
 from app.persistence.models import Account
@@ -27,6 +33,11 @@ class AccountService:
         account_type: str,
         opening_balance: Decimal,
         currency: str,
+        color: str | None,
+        icon: str | None,
+        goal_name: str | None,
+        goal_target_amount: Decimal | None,
+        goal_target_date: date | None,
     ) -> Account:
         account = await self.account_repository.create(
             user_id=user_id,
@@ -34,6 +45,11 @@ class AccountService:
             account_type=validate_account_type(account_type).value,
             opening_balance=validate_opening_balance(opening_balance),
             currency=validate_account_currency(currency),
+            color=normalize_account_color(color),
+            icon=normalize_account_icon(icon),
+            goal_name=normalize_goal_name(goal_name),
+            goal_target_amount=validate_goal_target_amount(goal_target_amount),
+            goal_target_date=validate_goal_target_date(goal_target_date),
         )
         await self.session.commit()
         await cache.bump_user_report_version(user_id)
@@ -76,6 +92,11 @@ class AccountService:
         name: str | None = None,
         account_type: str | None = None,
         currency: str | None = None,
+        color: str | None = None,
+        icon: str | None = None,
+        goal_name: str | None = None,
+        goal_target_amount: Decimal | None = None,
+        goal_target_date: date | None = None,
     ) -> Account:
         updates: dict[str, object] = {}
         if name is not None:
@@ -84,6 +105,16 @@ class AccountService:
             updates["account_type"] = validate_account_type(account_type).value
         if currency is not None:
             updates["currency"] = validate_account_currency(currency)
+        if color is not None:
+            updates["color"] = normalize_account_color(color)
+        if icon is not None:
+            updates["icon"] = normalize_account_icon(icon)
+        if goal_name is not None:
+            updates["goal_name"] = normalize_goal_name(goal_name)
+        if goal_target_amount is not None:
+            updates["goal_target_amount"] = validate_goal_target_amount(goal_target_amount)
+        if goal_target_date is not None:
+            updates["goal_target_date"] = validate_goal_target_date(goal_target_date)
 
         account = await self.account_repository.update(account_id, user_id, **updates)
         if account is None:

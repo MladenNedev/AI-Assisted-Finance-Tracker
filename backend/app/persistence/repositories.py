@@ -79,6 +79,11 @@ class AccountRepository:
         account_type: str,
         opening_balance: Decimal,
         currency: str,
+        color: str | None = None,
+        icon: str | None = None,
+        goal_name: str | None = None,
+        goal_target_amount: Decimal | None = None,
+        goal_target_date: date | None = None,
     ) -> Account:
         account = Account(
             user_id=user_id,
@@ -86,6 +91,11 @@ class AccountRepository:
             account_type=account_type,
             opening_balance=opening_balance,
             currency=currency,
+            color=color,
+            icon=icon,
+            goal_name=goal_name,
+            goal_target_amount=goal_target_amount,
+            goal_target_date=goal_target_date,
         )
         self.session.add(account)
         await self.session.flush()
@@ -951,6 +961,71 @@ class ReportingRepository:
             }
             for row in rows
         ]
+
+    async def get_net_worth_base(self, user_id: UUID, *, as_of: datetime) -> Decimal:
+        opening_stmt = select(func.coalesce(func.sum(Account.opening_balance), Decimal("0"))).where(
+            Account.user_id == user_id,
+            Account.is_active.is_(True),
+        )
+        opening_balance = Decimal(await self.session.scalar(opening_stmt) or 0)
+
+        signed_expr = func.coalesce(
+            func.sum(
+                case(
+                    (Transaction.direction == TransactionDirection.IN.value, Transaction.amount),
+                    else_=-Transaction.amount,
+                )
+            ),
+            Decimal("0"),
+        )
+        movement_stmt = (
+            select(signed_expr)
+            .select_from(Transaction)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(Account.user_id == user_id, Transaction.occurred_at < as_of)
+        )
+        movement = Decimal(await self.session.scalar(movement_stmt) or 0)
+        return opening_balance + movement
+
+    async def get_net_worth_deltas(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        *,
+        granularity: str,
+    ) -> list[dict[str, object]]:
+        if granularity == "week":
+            period_expr = func.date_trunc("week", Transaction.occurred_at)
+        elif granularity == "month":
+            period_expr = func.date_trunc("month", Transaction.occurred_at)
+        else:
+            period_expr = func.date_trunc("day", Transaction.occurred_at)
+
+        delta_expr = func.coalesce(
+            func.sum(
+                case(
+                    (Transaction.direction == TransactionDirection.IN.value, Transaction.amount),
+                    else_=-Transaction.amount,
+                )
+            ),
+            Decimal("0"),
+        )
+
+        stmt = (
+            select(period_expr.label("period"), delta_expr.label("delta"))
+            .select_from(Transaction)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(
+                Account.user_id == user_id,
+                Transaction.occurred_at >= from_date,
+                Transaction.occurred_at < to_date,
+            )
+            .group_by(period_expr)
+            .order_by(period_expr.asc())
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [{"period": row.period, "delta": Decimal(row.delta or 0)} for row in rows]
 
     async def get_category_trend(
         self,
