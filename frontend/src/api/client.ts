@@ -12,7 +12,7 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL =
+export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 const CSRF_COOKIE_NAME = "finance_csrf";
 const CSRF_HEADER_NAME = "X-CSRF-Token";
@@ -32,13 +32,17 @@ function getCookie(name: string): string | null {
   return null;
 }
 
+export function getCsrfToken(): string | null {
+  return getCookie(CSRF_COOKIE_NAME);
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
   const isMutatingMethod = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
-  const csrfToken = isMutatingMethod ? getCookie(CSRF_COOKIE_NAME) : null;
+  const csrfToken = isMutatingMethod ? getCsrfToken() : null;
   const csrfHeaders = csrfToken ? { [CSRF_HEADER_NAME]: csrfToken } : {};
 
   const response = await fetch(`${API_BASE_URL}${path}`, {

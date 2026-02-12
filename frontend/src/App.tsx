@@ -1,4 +1,10 @@
-import { AppShell, Button, Group, Text } from "@mantine/core";
+import {
+  AppShell,
+  Button,
+  Group,
+  Text,
+  useMantineColorScheme,
+} from "@mantine/core";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -9,17 +15,19 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Categories from "./pages/Categories";
 import Transactions from "./pages/Transactions";
+import Recurring from "./pages/Recurring";
 
 function AppLayout() {
   const { user } = useAuth();
   const location = useLocation();
+  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
 
   return (
     <AppShell padding="md" header={{ height: 56 }}>
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="sm">
-            <Text fw={700}>Finance Tracker</Text>
+            <Text fw={700}>Capital Flow</Text>
             {user ? (
               <Group gap="xs">
                 <Button
@@ -62,12 +70,25 @@ function AppLayout() {
                 >
                   Budgets
                 </Button>
+                <Button
+                  component={Link}
+                  to="/recurring"
+                  size="xs"
+                  variant={location.pathname.startsWith("/recurring") ? "light" : "subtle"}
+                >
+                  Recurring
+                </Button>
               </Group>
             ) : null}
           </Group>
-          <Text size="sm" c="dimmed">
-            {user ? user.email : "Not signed in"}
-          </Text>
+          <Group gap="sm">
+            <Button variant="subtle" size="xs" onClick={() => toggleColorScheme()}>
+              {colorScheme === "dark" ? "Light mode" : "Dark mode"}
+            </Button>
+            <Text size="sm" c="dimmed">
+              {user ? user.email : "Not signed in"}
+            </Text>
+          </Group>
         </Group>
       </AppShell.Header>
       <AppShell.Main>
@@ -118,6 +139,14 @@ function AppLayout() {
             element={
               <ProtectedRoute>
                 <Categories />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recurring"
+            element={
+              <ProtectedRoute>
+                <Recurring />
               </ProtectedRoute>
             }
           />

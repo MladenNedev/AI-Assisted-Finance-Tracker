@@ -1,9 +1,12 @@
+import csv
+import io
 from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
 from app.core.cache import CacheService, cache, report_cache_key
 from app.core.config import get_settings
+from app.core.exceptions import DomainExceptionError
 from app.domain.money import TransactionDirection
 from app.domain.reporting import (
     CategoryBreakdownType,
@@ -20,7 +23,15 @@ from app.schemas.reporting import (
     CashflowTrendResponse,
     CategoryBreakdownItem,
     CategoryBreakdownResponse,
+    CategoryTrendPoint,
+    CategoryTrendResponse,
     DashboardSummaryResponse,
+    HeatmapPoint,
+    HeatmapResponse,
+    MerchantSummaryItem,
+    MerchantSummaryResponse,
+    NetWorthPoint,
+    NetWorthTrendResponse,
 )
 
 
@@ -39,8 +50,17 @@ class ReportingService:
         self,
         user_id: UUID,
         period: ReportPeriod,
+        *,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
     ) -> DashboardSummaryResponse:
-        from_date, to_date = get_period_bounds(period)
+        if from_date or to_date:
+            if from_date is None or to_date is None:
+                raise DomainExceptionError("from_date and to_date must be provided together")
+            from_date, to_date = validate_date_range(from_date, to_date)
+            period = ReportPeriod.CUSTOM
+        else:
+            from_date, to_date = get_period_bounds(period)
         key = await self._build_cache_key(
             user_id,
             "dashboard",
@@ -139,6 +159,62 @@ class ReportingService:
         )
         return response
 
+    async def get_net_worth_trend(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        granularity: ReportGranularity,
+    ) -> NetWorthTrendResponse:
+        from_date, to_date = validate_date_range(from_date, to_date)
+        key = await self._build_cache_key(
+            user_id,
+            "net_worth",
+            {
+                "from_date": from_date.isoformat(),
+                "to_date": to_date.isoformat(),
+                "granularity": granularity.value,
+            },
+        )
+        cached = await self.cache.get_json(key)
+        if cached is not None:
+            return NetWorthTrendResponse.model_validate(cached)
+
+        base_balance = await self.reporting_repository.get_net_worth_base(user_id, as_of=from_date)
+        deltas = await self.reporting_repository.get_net_worth_deltas(
+            user_id,
+            from_date,
+            to_date,
+            granularity=granularity.value,
+        )
+        delta_by_period = {
+            normalize_report_datetime(row["period"]): Decimal(row["delta"])
+            for row in deltas
+            if isinstance(row.get("period"), datetime)
+        }
+
+        points: list[NetWorthPoint] = []
+        current = _align_to_bucket(from_date, granularity)
+        step = _granularity_step(granularity)
+        running = Decimal(base_balance)
+        while current < to_date:
+            running += Decimal(delta_by_period.get(current, Decimal("0")))
+            points.append(NetWorthPoint(period=current, balance=running))
+            current = _align_to_bucket(current + step, granularity)
+
+        response = NetWorthTrendResponse(
+            from_date=from_date,
+            to_date=to_date,
+            granularity=granularity,
+            points=points,
+        )
+        await self.cache.set_json(
+            key,
+            response.model_dump(mode="json"),
+            ttl_seconds=self.settings.report_cache_ttl_seconds,
+        )
+        return response
+
     async def get_category_breakdown(
         self,
         user_id: UUID,
@@ -205,6 +281,320 @@ class ReportingService:
             ttl_seconds=self.settings.report_cache_ttl_seconds,
         )
         return response
+
+    async def get_category_trend(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        granularity: ReportGranularity,
+        breakdown_type: CategoryBreakdownType,
+        *,
+        limit: int = 5,
+    ) -> CategoryTrendResponse:
+        from_date, to_date = validate_date_range(from_date, to_date)
+        key = await self._build_cache_key(
+            user_id,
+            "category_trend",
+            {
+                "from_date": from_date.isoformat(),
+                "to_date": to_date.isoformat(),
+                "granularity": granularity.value,
+                "type": breakdown_type.value,
+                "limit": limit,
+            },
+        )
+        cached = await self.cache.get_json(key)
+        if cached is not None:
+            return CategoryTrendResponse.model_validate(cached)
+
+        direction = (
+            TransactionDirection.OUT
+            if breakdown_type == CategoryBreakdownType.EXPENSE
+            else TransactionDirection.IN
+        )
+        top_categories = await self.reporting_repository.get_category_breakdown(
+            user_id,
+            from_date,
+            to_date,
+            direction=direction,
+            limit=limit,
+        )
+        category_ids = [
+            row["category_id"] for row in top_categories if row.get("category_id") is not None
+        ]
+        rows = await self.reporting_repository.get_category_trend(
+            user_id,
+            from_date,
+            to_date,
+            granularity=granularity.value,
+            direction=direction,
+            category_ids=category_ids if category_ids else None,
+        )
+
+        points = [
+            CategoryTrendPoint(
+                period=row["period"],
+                category_id=row["category_id"],
+                category_name=str(row["category_name"]),
+                color=row["color"] if isinstance(row["color"], str) else None,
+                icon=row["icon"] if isinstance(row["icon"], str) else None,
+                amount=Decimal(row["amount"]),
+            )
+            for row in rows
+            if isinstance(row["period"], datetime)
+        ]
+
+        response = CategoryTrendResponse(
+            from_date=from_date,
+            to_date=to_date,
+            granularity=granularity,
+            breakdown_type=breakdown_type,
+            points=points,
+        )
+        await self.cache.set_json(
+            key,
+            response.model_dump(mode="json"),
+            ttl_seconds=self.settings.report_cache_ttl_seconds,
+        )
+        return response
+
+    async def get_spending_heatmap(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        breakdown_type: CategoryBreakdownType,
+    ) -> HeatmapResponse:
+        from_date, to_date = validate_date_range(from_date, to_date)
+        key = await self._build_cache_key(
+            user_id,
+            "heatmap",
+            {
+                "from_date": from_date.isoformat(),
+                "to_date": to_date.isoformat(),
+                "type": breakdown_type.value,
+            },
+        )
+        cached = await self.cache.get_json(key)
+        if cached is not None:
+            return HeatmapResponse.model_validate(cached)
+
+        direction = (
+            TransactionDirection.OUT
+            if breakdown_type == CategoryBreakdownType.EXPENSE
+            else TransactionDirection.IN
+        )
+        rows = await self.reporting_repository.get_daily_totals(
+            user_id,
+            from_date,
+            to_date,
+            direction=direction,
+        )
+        amount_by_date: dict[datetime.date, Decimal] = {}
+        for row in rows:
+            period = row.get("period")
+            if isinstance(period, datetime):
+                amount_by_date[normalize_report_datetime(period).date()] = Decimal(row["amount"])
+
+        points: list[HeatmapPoint] = []
+        current = normalize_report_datetime(from_date).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        end = normalize_report_datetime(to_date)
+        while current < end:
+            date_key = current.date()
+            amount = amount_by_date.get(date_key, Decimal("0"))
+            points.append(HeatmapPoint(date=date_key, amount=amount))
+            current += timedelta(days=1)
+
+        response = HeatmapResponse(
+            from_date=from_date,
+            to_date=to_date,
+            breakdown_type=breakdown_type,
+            points=points,
+        )
+        await self.cache.set_json(
+            key,
+            response.model_dump(mode="json"),
+            ttl_seconds=self.settings.report_cache_ttl_seconds,
+        )
+        return response
+
+    async def get_merchant_summary(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        breakdown_type: CategoryBreakdownType,
+        *,
+        limit: int = 10,
+    ) -> MerchantSummaryResponse:
+        from_date, to_date = validate_date_range(from_date, to_date)
+        key = await self._build_cache_key(
+            user_id,
+            "merchants",
+            {
+                "from_date": from_date.isoformat(),
+                "to_date": to_date.isoformat(),
+                "type": breakdown_type.value,
+                "limit": limit,
+            },
+        )
+        cached = await self.cache.get_json(key)
+        if cached is not None:
+            return MerchantSummaryResponse.model_validate(cached)
+
+        direction = (
+            TransactionDirection.OUT
+            if breakdown_type == CategoryBreakdownType.EXPENSE
+            else TransactionDirection.IN
+        )
+        rows = await self.reporting_repository.get_merchant_summary(
+            user_id,
+            from_date,
+            to_date,
+            direction=direction,
+            limit=limit,
+        )
+        merchants = [
+            MerchantSummaryItem(
+                merchant=str(row["merchant"]),
+                total=Decimal(row["total"]),
+                count=int(row["count"]),
+                average=Decimal(row["average"]),
+            )
+            for row in rows
+        ]
+        response = MerchantSummaryResponse(
+            from_date=from_date,
+            to_date=to_date,
+            breakdown_type=breakdown_type,
+            merchants=merchants,
+        )
+        await self.cache.set_json(
+            key,
+            response.model_dump(mode="json"),
+            ttl_seconds=self.settings.report_cache_ttl_seconds,
+        )
+        return response
+
+    async def export_dashboard_csv(
+        self,
+        user_id: UUID,
+        period: ReportPeriod,
+        *,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> str:
+        summary = await self.get_dashboard_summary(
+            user_id,
+            period,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["section", "name", "value", "currency", "account_type"])
+        writer.writerow(["summary", "income", str(summary.income), "", ""])
+        writer.writerow(["summary", "expenses", str(summary.expenses), "", ""])
+        writer.writerow(["summary", "net", str(summary.net), "", ""])
+        writer.writerow(["summary", "total_balance", str(summary.total_balance), "", ""])
+        writer.writerow(["summary", "account_count", str(summary.account_count), "", ""])
+        for account in summary.accounts:
+            writer.writerow(
+                [
+                    "account",
+                    account.account_name,
+                    str(account.balance),
+                    account.currency,
+                    account.account_type,
+                ]
+            )
+        return output.getvalue()
+
+    async def export_cashflow_csv(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        granularity: ReportGranularity,
+    ) -> str:
+        response = await self.get_cashflow_trend(user_id, from_date, to_date, granularity)
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["period", "income", "expenses", "net"])
+        for point in response.points:
+            writer.writerow(
+                [
+                    point.period.isoformat(),
+                    str(point.income),
+                    str(point.expenses),
+                    str(point.net),
+                ]
+            )
+        return output.getvalue()
+
+    async def export_category_breakdown_csv(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        breakdown_type: CategoryBreakdownType,
+        *,
+        limit: int = 10,
+    ) -> str:
+        response = await self.get_category_breakdown(
+            user_id, from_date, to_date, breakdown_type, limit=limit
+        )
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["category_name", "amount", "percentage", "category_id", "color", "icon"])
+        for item in response.categories:
+            writer.writerow(
+                [
+                    item.category_name,
+                    str(item.amount),
+                    f"{item.percentage:.2f}",
+                    item.category_id or "",
+                    item.color or "",
+                    item.icon or "",
+                ]
+            )
+        return output.getvalue()
+
+    async def export_category_trend_csv(
+        self,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        granularity: ReportGranularity,
+        breakdown_type: CategoryBreakdownType,
+        *,
+        limit: int = 5,
+    ) -> str:
+        response = await self.get_category_trend(
+            user_id,
+            from_date,
+            to_date,
+            granularity,
+            breakdown_type,
+            limit=limit,
+        )
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["period", "category_name", "amount", "category_id", "color"])
+        for point in response.points:
+            writer.writerow(
+                [
+                    point.period.isoformat(),
+                    point.category_name,
+                    str(point.amount),
+                    point.category_id or "",
+                    point.color or "",
+                ]
+            )
+        return output.getvalue()
 
     async def invalidate_user_cache(self, user_id: UUID) -> None:
         await self.cache.bump_user_report_version(user_id)

@@ -1,7 +1,7 @@
 DC = docker compose --env-file .env -f infra/docker-compose.yml
 DC_RUN = $(DC) run --rm --build
 
-.PHONY: up down migrate test format lint
+.PHONY: up down migrate test format lint format-file lint-file
 
 up:
 	$(DC) up --build --renew-anon-volumes -d
@@ -25,3 +25,11 @@ format:
 lint:
 	$(DC_RUN) backend ruff check app tests
 	$(DC_RUN) backend black --check app tests
+
+format-file:
+	$(DC_RUN) backend ruff check --fix $(FILE)
+	$(DC_RUN) backend black $(FILE)
+
+lint-file:
+	$(DC_RUN) backend ruff check $(FILE)
+	$(DC_RUN) backend black --check $(FILE)

@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
@@ -7,6 +8,13 @@ from app.core.config import get_settings
 from app.core.rate_limit import RateLimitPolicy, enforce_rate_limit
 from app.core.security import generate_csrf_token
 from app.persistence.models import User
+from app.persistence.repositories import (
+    AccountRepository,
+    BudgetRepository,
+    CategoryRepository,
+    RecurringTransactionRepository,
+    TransactionRepository,
+)
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
@@ -15,8 +23,10 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.services.auth_service import AuthService
+from app.services.demo_seed_service import DemoSeedService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 async def enforce_login_rate_limit(request: Request) -> None:
@@ -66,7 +76,8 @@ async def login(
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
     _: Annotated[None, Depends(enforce_login_rate_limit)],
 ) -> LoginResponse:
-    token = await auth_service.login(email=payload.email, password=payload.password)
+    await auth_service.ensure_demo_user(email=payload.email, password=payload.password)
+    token, user = await auth_service.login(email=payload.email, password=payload.password)
     settings = get_settings()
     csrf_token = generate_csrf_token()
 
@@ -89,6 +100,21 @@ async def login(
         path="/",
     )
     response.headers[settings.csrf_header_name] = csrf_token
+
+    if settings.demo_seed_enabled and user.email.lower() == settings.demo_email.lower():
+        seeder = DemoSeedService(
+            session=auth_service.session,
+            account_repository=AccountRepository(auth_service.session),
+            category_repository=CategoryRepository(auth_service.session),
+            budget_repository=BudgetRepository(auth_service.session),
+            transaction_repository=TransactionRepository(auth_service.session),
+            recurring_repository=RecurringTransactionRepository(auth_service.session),
+        )
+        try:
+            await seeder.seed_if_needed(user)
+        except Exception:
+            logger.exception("Failed to seed demo user data")
+
     return LoginResponse(status="ok")
 
 

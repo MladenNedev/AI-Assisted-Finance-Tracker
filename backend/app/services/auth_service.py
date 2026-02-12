@@ -54,7 +54,31 @@ class AuthService:
         await self.session.refresh(user)
         return user
 
-    async def login(self, email: str, password: str) -> str:
+    async def ensure_demo_user(self, email: str, password: str) -> User | None:
+        if not self.settings.demo_seed_enabled:
+            return None
+
+        normalized_email = normalize_email(email)
+        demo_email = normalize_email(self.settings.demo_email)
+        if normalized_email != demo_email:
+            return None
+
+        existing_user = await self.user_repository.get_by_email(demo_email)
+        if existing_user is not None:
+            return existing_user
+
+        if password != self.settings.demo_password:
+            return None
+
+        user = await self.user_repository.create(
+            email=demo_email,
+            hashed_password=hash_password(self.settings.demo_password),
+        )
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user
+
+    async def login(self, email: str, password: str) -> tuple[str, User]:
         normalized_email = normalize_email(email)
         user = await self.user_repository.get_by_email(normalized_email)
         if user is None or not verify_password(password, user.hashed_password):
@@ -69,7 +93,7 @@ class AuthService:
             expires_at=expires_at,
         )
         await self.session.commit()
-        return token
+        return token, user
 
     async def logout(self, token: str) -> None:
         token_hash = hash_session_token(token)

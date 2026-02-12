@@ -9,6 +9,7 @@ class ReportPeriod(StrEnum):
     WEEK = "week"
     MONTH = "month"
     YEAR = "year"
+    CUSTOM = "custom"
 
 
 class ReportGranularity(StrEnum):
@@ -20,6 +21,14 @@ class ReportGranularity(StrEnum):
 class CategoryBreakdownType(StrEnum):
     EXPENSE = "expense"
     INCOME = "income"
+
+
+class ReportExportType(StrEnum):
+    DASHBOARD = "dashboard"
+    CASHFLOW = "cashflow"
+    CATEGORIES = "categories"
+    CATEGORY_TREND = "category_trend"
+    NET_WORTH = "net_worth"
 
 
 def normalize_report_datetime(value: datetime) -> datetime:

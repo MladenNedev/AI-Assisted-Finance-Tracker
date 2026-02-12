@@ -42,6 +42,7 @@ class BudgetService:
         category_id: UUID,
         month: str,
         limit_amount: Decimal,
+        rollover_enabled: bool,
     ) -> Budget:
         month_start = parse_budget_month(month)
         normalized_limit = validate_budget_limit(limit_amount)
@@ -64,6 +65,7 @@ class BudgetService:
                 category_id=category_id,
                 month_start=month_start,
                 limit_amount=normalized_limit,
+                rollover_enabled=rollover_enabled,
             )
             await self.session.commit()
             await cache.bump_user_report_version(user_id)
@@ -105,10 +107,15 @@ class BudgetService:
         budget_id: UUID,
         user_id: UUID,
         *,
-        limit_amount: Decimal,
+        limit_amount: Decimal | None,
+        rollover_enabled: bool | None,
     ) -> Budget:
-        budget = await self.budget_repository.update_limit(
-            budget_id, user_id, validate_budget_limit(limit_amount)
+        normalized_limit = validate_budget_limit(limit_amount) if limit_amount is not None else None
+        budget = await self.budget_repository.update(
+            budget_id,
+            user_id,
+            limit_amount=normalized_limit,
+            rollover_enabled=rollover_enabled,
         )
         if budget is None:
             raise BudgetNotFoundError("Budget not found")
@@ -146,6 +153,7 @@ class BudgetService:
                 category_id=source_budget.category_id,
                 month_start=target_month_start,
                 limit_amount=source_budget.limit_amount,
+                rollover_enabled=source_budget.rollover_enabled,
             )
             created_count += 1
 
@@ -167,14 +175,38 @@ class BudgetService:
         )
 
         now = datetime.now(UTC)
+        previous_month_start = get_previous_month(month_start)
+        previous_range_start, previous_range_end = get_month_bounds(previous_month_start)
+        previous_rows = await self.budget_repository.list_month_progress(
+            user_id=user_id,
+            month_start=previous_month_start,
+            occurred_from=previous_range_start,
+            occurred_to=previous_range_end,
+        )
+        rollover_lookup: dict[UUID, Decimal] = {}
+        for row in previous_rows:
+            limit_amount = row["limit_amount"]
+            spent_amount = row["spent_amount"]
+            if not isinstance(limit_amount, Decimal) or not isinstance(spent_amount, Decimal):
+                continue
+            rollover = limit_amount - spent_amount
+            if rollover > 0:
+                rollover_lookup[row["category_id"]] = rollover
+
         output: list[dict[str, object]] = []
         for row in rows:
             limit_amount = row["limit_amount"]
             spent_amount = row["spent_amount"]
             if not isinstance(limit_amount, Decimal) or not isinstance(spent_amount, Decimal):
                 continue
+            rollover_amount = (
+                rollover_lookup.get(row["category_id"], Decimal("0"))
+                if row.get("rollover_enabled")
+                else Decimal("0")
+            )
+            effective_limit = limit_amount + rollover_amount
             metrics = calculate_progress_metrics(
-                limit_amount=limit_amount,
+                limit_amount=effective_limit,
                 spent_amount=spent_amount,
                 month_start=month_start,
                 now=now,
@@ -190,9 +222,45 @@ class BudgetService:
                     "daily_average": metrics.daily_average,
                     "projected_spend": metrics.projected_spend,
                     "projected_diff": metrics.projected_diff,
+                    "rollover_amount": rollover_amount,
+                    "effective_limit": effective_limit,
                 }
             )
         return month_start, output
+
+    async def get_budget_vs_actual(
+        self,
+        user_id: UUID,
+        *,
+        months: int = 6,
+    ) -> list[dict[str, object]]:
+        months = max(1, min(months, 24))
+        month_start = _current_month_start()
+        month_starts = [month_start]
+        for _ in range(months - 1):
+            month_start = get_previous_month(month_start)
+            month_starts.append(month_start)
+        month_starts.reverse()
+
+        items: list[dict[str, object]] = []
+        for entry in month_starts:
+            range_start, range_end = get_month_bounds(entry)
+            budgeted = await self.budget_repository.sum_limits_for_month(user_id, entry)
+            spent = await self.budget_repository.sum_spent_for_month(
+                user_id=user_id,
+                month_start=entry,
+                occurred_from=range_start,
+                occurred_to=range_end,
+            )
+            items.append(
+                {
+                    "month": entry,
+                    "budgeted": budgeted,
+                    "spent": spent,
+                    "variance": budgeted - spent,
+                }
+            )
+        return items
 
 
 def _current_month_start() -> date:

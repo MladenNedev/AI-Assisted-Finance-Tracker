@@ -13,6 +13,7 @@ class BudgetCreateRequest(BaseModel):
     category_id: UUID
     month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     limit_amount: Decimal = Field(gt=0)
+    rollover_enabled: bool = False
 
     @field_validator("limit_amount")
     @classmethod
@@ -22,6 +23,7 @@ class BudgetCreateRequest(BaseModel):
 
 class BudgetUpdateRequest(BaseModel):
     limit_amount: Decimal | None = Field(default=None, gt=0)
+    rollover_enabled: bool | None = None
 
     @field_validator("limit_amount")
     @classmethod
@@ -39,6 +41,7 @@ class BudgetResponse(BaseModel):
     category_id: UUID
     month: str
     limit_amount: Decimal
+    rollover_enabled: bool
     created_at: datetime
     updated_at: datetime
 
@@ -55,6 +58,9 @@ class BudgetProgressItem(BaseModel):
     category_icon: str | None
     month: str
     limit_amount: Decimal
+    effective_limit: Decimal
+    rollover_amount: Decimal
+    rollover_enabled: bool
     spent_amount: Decimal
     remaining_amount: Decimal
     percentage_used: float
@@ -79,3 +85,14 @@ class CopyBudgetsResponse(BaseModel):
     source_month: str
     target_month: str
     created_count: int
+
+
+class BudgetSummaryItem(BaseModel):
+    month: str
+    budgeted: Decimal
+    spent: Decimal
+    variance: Decimal
+
+
+class BudgetSummaryResponse(BaseModel):
+    items: list[BudgetSummaryItem]

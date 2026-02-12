@@ -1,10 +1,10 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.domain.category import normalize_category_color
+from app.domain.category import normalize_category_color, normalize_category_icon
 from app.domain.money import AccountType, TransactionDirection, normalize_currency, quantize_money
 
 
@@ -19,6 +19,11 @@ class AccountCreateRequest(BaseModel):
     account_type: AccountType
     opening_balance: Decimal = Decimal("0")
     currency: str = Field(default="USD", min_length=3, max_length=3)
+    color: str | None = Field(default=None, min_length=7, max_length=7)
+    icon: str | None = Field(default=None, max_length=50)
+    goal_name: str | None = Field(default=None, max_length=100)
+    goal_target_amount: Decimal | None = Field(default=None, gt=0)
+    goal_target_date: date | None = None
 
     @field_validator("opening_balance")
     @classmethod
@@ -30,11 +35,26 @@ class AccountCreateRequest(BaseModel):
     def validate_currency(cls, value: str) -> str:
         return normalize_currency(value)
 
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, value: str | None) -> str | None:
+        return normalize_category_color(value)
+
+    @field_validator("icon")
+    @classmethod
+    def validate_icon(cls, value: str | None) -> str | None:
+        return normalize_category_icon(value)
+
 
 class AccountUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     account_type: AccountType | None = None
     currency: str | None = Field(default=None, min_length=3, max_length=3)
+    color: str | None = Field(default=None, min_length=7, max_length=7)
+    icon: str | None = Field(default=None, max_length=50)
+    goal_name: str | None = Field(default=None, max_length=100)
+    goal_target_amount: Decimal | None = Field(default=None, gt=0)
+    goal_target_date: date | None = None
 
     @field_validator("currency")
     @classmethod
@@ -42,6 +62,16 @@ class AccountUpdateRequest(BaseModel):
         if value is None:
             return None
         return normalize_currency(value)
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, value: str | None) -> str | None:
+        return normalize_category_color(value)
+
+    @field_validator("icon")
+    @classmethod
+    def validate_icon(cls, value: str | None) -> str | None:
+        return normalize_category_icon(value)
 
 
 class AccountResponse(BaseModel):
@@ -53,6 +83,11 @@ class AccountResponse(BaseModel):
     account_type: AccountType
     currency: str
     opening_balance: Decimal
+    color: str | None
+    icon: str | None
+    goal_name: str | None
+    goal_target_amount: Decimal | None
+    goal_target_date: date | None
     current_balance: Decimal = Decimal("0")
     is_active: bool
     created_at: datetime
@@ -117,6 +152,8 @@ class TransactionCreateRequest(BaseModel):
     occurred_at: datetime
     merchant: str | None = Field(default=None, max_length=200)
     note: str | None = None
+    tags: list[str] | None = None
+    splits: list["TransactionSplitRequest"] | None = None
 
     @field_validator("amount")
     @classmethod
@@ -131,6 +168,8 @@ class TransactionUpdateRequest(BaseModel):
     occurred_at: datetime | None = None
     merchant: str | None = Field(default=None, max_length=200)
     note: str | None = None
+    tags: list[str] | None = None
+    splits: list["TransactionSplitRequest"] | None = None
 
     @field_validator("amount")
     @classmethod
@@ -146,15 +185,94 @@ class TransactionResponse(BaseModel):
     id: UUID
     account_id: UUID
     category_id: UUID | None
+    transfer_id: UUID | None
     amount: Decimal
     direction: TransactionDirection
     signed_amount: Decimal
     merchant: str | None
     note: str | None
+    tags: list[str] | None
+    splits: list["TransactionSplitResponse"] | None = None
+    attachments: list["TransactionAttachmentResponse"] | None = None
     occurred_at: datetime
     created_at: datetime
     updated_at: datetime
 
 
+class TransactionSplitRequest(BaseModel):
+    category_id: UUID | None = None
+    amount: Decimal = Field(gt=0)
+    note: str | None = None
+
+    @field_validator("amount")
+    @classmethod
+    def normalize_amount(cls, value: Decimal) -> Decimal:
+        return quantize_money(value)
+
+
+class TransactionSplitResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    category_id: UUID | None
+    amount: Decimal
+    note: str | None
+    created_at: datetime
+
+
+class TransactionAttachmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    filename: str
+    content_type: str
+    size_bytes: int
+    created_at: datetime
+
+
 class TransactionListResponse(PaginatedResponse):
     items: list[TransactionResponse]
+
+
+class TransferCreateRequest(BaseModel):
+    from_account_id: UUID
+    to_account_id: UUID
+    amount: Decimal = Field(gt=0)
+    occurred_at: datetime
+    note: str | None = None
+
+    @field_validator("amount")
+    @classmethod
+    def normalize_amount(cls, value: Decimal) -> Decimal:
+        return quantize_money(value)
+
+
+class TransferResponse(BaseModel):
+    transfer_id: UUID
+    outgoing: TransactionResponse
+    incoming: TransactionResponse
+
+
+class TransactionBulkCategoryRequest(BaseModel):
+    transaction_ids: list[UUID] = Field(min_length=1, max_length=200)
+    category_id: UUID | None = None
+
+
+class TransactionBulkCategoryResponse(BaseModel):
+    updated_count: int
+
+
+class TransactionImportError(BaseModel):
+    row: int
+    message: str
+
+
+class TransactionImportResponse(BaseModel):
+    imported: int
+    skipped: int
+    errors: list[TransactionImportError]
+
+
+TransactionCreateRequest.model_rebuild()
+TransactionUpdateRequest.model_rebuild()
+TransactionResponse.model_rebuild()
