@@ -122,7 +122,6 @@ class DemoSeedService:
         await self.session.execute(delete(Budget).where(Budget.user_id == user_id))
         await self.session.execute(delete(Category).where(Category.user_id == user_id))
         await self.session.execute(delete(Account).where(Account.user_id == user_id))
-        await self.session.commit()
 
     async def _seed(self, user_id: UUID) -> None:
         now = datetime.now(UTC)
