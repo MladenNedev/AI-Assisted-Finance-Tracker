@@ -2,9 +2,10 @@ import {
   AppShell,
   Button,
   Group,
+  Menu,
   Text,
-  useMantineColorScheme,
 } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -20,74 +21,85 @@ import Recurring from "./pages/Recurring";
 function AppLayout() {
   const { user } = useAuth();
   const location = useLocation();
-  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
+  const isCompactNav = useMediaQuery("(max-width: 760px)");
+  const isStackedHeader = useMediaQuery("(max-width: 1035px)");
+  const headerHeight = user && (isCompactNav || isStackedHeader)
+    ? isCompactNav
+      ? 72
+      : 96
+    : 56;
+  const showInlineNav = user && !isCompactNav;
+
+  const navItems = [
+    { label: "Dashboard", to: "/dashboard" },
+    { label: "Accounts", to: "/accounts" },
+    { label: "Transactions", to: "/transactions" },
+    { label: "Categories", to: "/categories" },
+    { label: "Budgets", to: "/budgets" },
+    { label: "Recurring", to: "/recurring" },
+  ];
 
   return (
-    <AppShell padding="md" header={{ height: 56 }}>
+    <AppShell padding="md" header={{ height: headerHeight }}>
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group gap="sm">
+        <Group
+          h="100%"
+          px="md"
+          py="xs"
+          justify="space-between"
+          align="center"
+          wrap="wrap"
+        >
+          <Group gap="sm" wrap="wrap" style={{ flex: 1 }}>
             <Text fw={700}>Capital Flow</Text>
-            {user ? (
-              <Group gap="xs">
-                <Button
-                  component={Link}
-                  to="/dashboard"
-                  size="xs"
-                  variant={location.pathname.startsWith("/dashboard") ? "light" : "subtle"}
-                >
-                  Dashboard
-                </Button>
-                <Button
-                  component={Link}
-                  to="/accounts"
-                  size="xs"
-                  variant={location.pathname.startsWith("/accounts") ? "light" : "subtle"}
-                >
-                  Accounts
-                </Button>
-                <Button
-                  component={Link}
-                  to="/transactions"
-                  size="xs"
-                  variant={location.pathname.startsWith("/transactions") ? "light" : "subtle"}
-                >
-                  Transactions
-                </Button>
-                <Button
-                  component={Link}
-                  to="/categories"
-                  size="xs"
-                  variant={location.pathname.startsWith("/categories") ? "light" : "subtle"}
-                >
-                  Categories
-                </Button>
-                <Button
-                  component={Link}
-                  to="/budgets"
-                  size="xs"
-                  variant={location.pathname.startsWith("/budgets") ? "light" : "subtle"}
-                >
-                  Budgets
-                </Button>
-                <Button
-                  component={Link}
-                  to="/recurring"
-                  size="xs"
-                  variant={location.pathname.startsWith("/recurring") ? "light" : "subtle"}
-                >
-                  Recurring
-                </Button>
+            {showInlineNav ? (
+              <Group gap="xs" wrap="wrap">
+                {navItems.map((item) => (
+                  <Button
+                    key={item.to}
+                    component={Link}
+                    to={item.to}
+                    size="xs"
+                    variant={location.pathname.startsWith(item.to) ? "light" : "subtle"}
+                  >
+                    {item.label}
+                  </Button>
+                ))}
               </Group>
             ) : null}
           </Group>
-          <Group gap="sm">
-            <Button variant="subtle" size="xs" onClick={() => toggleColorScheme()}>
-              {colorScheme === "dark" ? "Light mode" : "Dark mode"}
-            </Button>
-            <Text size="sm" c="dimmed">
-              {user ? user.email : "Not signed in"}
-            </Text>
+          <Group
+            gap="sm"
+            align="center"
+            wrap="wrap"
+            w={isCompactNav ? undefined : isStackedHeader ? "100%" : undefined}
+          >
+            {user && isCompactNav ? (
+              <Menu shadow="md" width={200} position="bottom-end">
+                <Menu.Target>
+                  <Button size="xs" variant="light">
+                    Menu
+                  </Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Label>{user.email}</Menu.Label>
+                  {navItems.map((item) => (
+                    <Menu.Item
+                      key={item.to}
+                      component={Link}
+                      to={item.to}
+                    >
+                      {item.label}
+                    </Menu.Item>
+                  ))}
+                </Menu.Dropdown>
+              </Menu>
+            ) : null}
+            {!isCompactNav ? (
+              <Text size="sm" c="dimmed" lineClamp={1} maw={220} title={user?.email}>
+                {user ? user.email : "Not signed in"}
+              </Text>
+            ) : null}
           </Group>
         </Group>
       </AppShell.Header>

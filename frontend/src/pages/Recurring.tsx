@@ -15,6 +15,7 @@ import {
 } from "@mantine/core";
 
 import { ApiError, apiFetch } from "../api/client";
+import ResponsiveTable from "../components/ResponsiveTable";
 import type {
   AccountResponse,
   CategoryResponse,
@@ -270,60 +271,62 @@ export default function Recurring() {
         </Alert>
       ) : null}
 
-      <Table striped highlightOnHover withTableBorder>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Account</Table.Th>
-            <Table.Th>Amount</Table.Th>
-            <Table.Th>Cadence</Table.Th>
-            <Table.Th>Next run</Table.Th>
-            <Table.Th>Status</Table.Th>
-            <Table.Th ta="right">Actions</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {recurring.map((entry) => {
-            const account = accounts.find((item) => item.id === entry.account_id);
-            return (
-              <Table.Tr key={entry.id}>
-                <Table.Td>{account?.name ?? "Unknown account"}</Table.Td>
-                <Table.Td>
-                  {entry.direction === "IN" ? "+" : "-"}${entry.amount}
-                </Table.Td>
-                <Table.Td>
-                  {entry.cadence} x{entry.interval}
-                </Table.Td>
-                <Table.Td>{formatDateTime(entry.next_run_at)}</Table.Td>
-                <Table.Td>{entry.is_active ? "Active" : "Paused"}</Table.Td>
-                <Table.Td>
-                  <Group justify="flex-end" gap="xs">
-                    <Button size="xs" variant="subtle" onClick={() => onOpenEdit(entry)}>
-                      Edit
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="subtle"
-                      color="red"
-                      onClick={() => onDelete(entry)}
-                    >
-                      Delete
-                    </Button>
-                  </Group>
+      <ResponsiveTable minWidth={700}>
+        <Table striped highlightOnHover withTableBorder>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Account</Table.Th>
+              <Table.Th>Amount</Table.Th>
+              <Table.Th>Cadence</Table.Th>
+              <Table.Th>Next run</Table.Th>
+              <Table.Th>Status</Table.Th>
+              <Table.Th ta="right">Actions</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {recurring.map((entry) => {
+              const account = accounts.find((item) => item.id === entry.account_id);
+              return (
+                <Table.Tr key={entry.id}>
+                  <Table.Td>{account?.name ?? "Unknown account"}</Table.Td>
+                  <Table.Td>
+                    {entry.direction === "IN" ? "+" : "-"}${entry.amount}
+                  </Table.Td>
+                  <Table.Td>
+                    {entry.cadence} x{entry.interval}
+                  </Table.Td>
+                  <Table.Td>{formatDateTime(entry.next_run_at)}</Table.Td>
+                  <Table.Td>{entry.is_active ? "Active" : "Paused"}</Table.Td>
+                  <Table.Td>
+                    <Group justify="flex-end" gap="xs">
+                      <Button size="xs" variant="subtle" onClick={() => onOpenEdit(entry)}>
+                        Edit
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="red"
+                        onClick={() => onDelete(entry)}
+                      >
+                        Delete
+                      </Button>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
+            {!loading && recurring.length === 0 ? (
+              <Table.Tr>
+                <Table.Td colSpan={6}>
+                  <Text ta="center" c="dimmed">
+                    No recurring transactions configured yet.
+                  </Text>
                 </Table.Td>
               </Table.Tr>
-            );
-          })}
-          {!loading && recurring.length === 0 ? (
-            <Table.Tr>
-              <Table.Td colSpan={6}>
-                <Text ta="center" c="dimmed">
-                  No recurring transactions configured yet.
-                </Text>
-              </Table.Td>
-            </Table.Tr>
-          ) : null}
-        </Table.Tbody>
-      </Table>
+            ) : null}
+          </Table.Tbody>
+        </Table>
+      </ResponsiveTable>
 
       <Modal
         opened={opened}

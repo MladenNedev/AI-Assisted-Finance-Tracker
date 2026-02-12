@@ -14,6 +14,7 @@ import {
 } from "@mantine/core";
 
 import { ApiError, apiFetch } from "../api/client";
+import ResponsiveTable from "../components/ResponsiveTable";
 import type {
   CategoryResponse,
   CreateCategoryRequest,
@@ -151,75 +152,77 @@ export default function Categories() {
         </Alert>
       ) : null}
 
-      <Table striped highlightOnHover withTableBorder>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Name</Table.Th>
-            <Table.Th>Type</Table.Th>
-            <Table.Th>Color</Table.Th>
-            <Table.Th ta="right">Actions</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {categories.map((category) => (
-            <Table.Tr key={category.id}>
-              <Table.Td>
-                <Group gap="xs">
-                  {category.icon ? <span>{category.icon}</span> : null}
-                  <Text>{category.name}</Text>
-                </Group>
-              </Table.Td>
-              <Table.Td>
-                <Badge color={category.is_income ? "teal" : "orange"}>
-                  {category.is_income ? "Income" : "Expense"}
-                </Badge>
-              </Table.Td>
-              <Table.Td>
-                {category.color ? (
-                  <div
-                    style={{
-                      width: 20,
-                      height: 20,
-                      borderRadius: 4,
-                      border: "1px solid #CED4DA",
-                      backgroundColor: category.color,
-                    }}
-                  />
-                ) : (
-                  <Text size="sm" c="dimmed">
-                    None
-                  </Text>
-                )}
-              </Table.Td>
-              <Table.Td>
-                <Group justify="flex-end" gap="xs">
-                  <Button size="xs" variant="subtle" onClick={() => onOpenEdit(category)}>
-                    Edit
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="subtle"
-                    color="red"
-                    onClick={() => onDelete(category)}
-                    loading={submitting}
-                  >
-                    Delete
-                  </Button>
-                </Group>
-              </Table.Td>
-            </Table.Tr>
-          ))}
-          {!loading && categories.length === 0 ? (
+      <ResponsiveTable minWidth={560}>
+        <Table striped highlightOnHover withTableBorder>
+          <Table.Thead>
             <Table.Tr>
-              <Table.Td colSpan={4}>
-                <Text ta="center" c="dimmed">
-                  No categories yet.
-                </Text>
-              </Table.Td>
+              <Table.Th>Name</Table.Th>
+              <Table.Th>Type</Table.Th>
+              <Table.Th>Color</Table.Th>
+              <Table.Th ta="right">Actions</Table.Th>
             </Table.Tr>
-          ) : null}
-        </Table.Tbody>
-      </Table>
+          </Table.Thead>
+          <Table.Tbody>
+            {categories.map((category) => (
+              <Table.Tr key={category.id}>
+                <Table.Td>
+                  <Group gap="xs">
+                    {category.icon ? <span>{category.icon}</span> : null}
+                    <Text>{category.name}</Text>
+                  </Group>
+                </Table.Td>
+                <Table.Td>
+                  <Badge color={category.is_income ? "teal" : "orange"}>
+                    {category.is_income ? "Income" : "Expense"}
+                  </Badge>
+                </Table.Td>
+                <Table.Td>
+                  {category.color ? (
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 4,
+                        border: "1px solid #CED4DA",
+                        backgroundColor: category.color,
+                      }}
+                    />
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      None
+                    </Text>
+                  )}
+                </Table.Td>
+                <Table.Td>
+                  <Group justify="flex-end" gap="xs">
+                    <Button size="xs" variant="subtle" onClick={() => onOpenEdit(category)}>
+                      Edit
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      color="red"
+                      onClick={() => onDelete(category)}
+                      loading={submitting}
+                    >
+                      Delete
+                    </Button>
+                  </Group>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+            {!loading && categories.length === 0 ? (
+              <Table.Tr>
+                <Table.Td colSpan={4}>
+                  <Text ta="center" c="dimmed">
+                    No categories yet.
+                  </Text>
+                </Table.Td>
+              </Table.Tr>
+            ) : null}
+          </Table.Tbody>
+        </Table>
+      </ResponsiveTable>
 
       <Modal
         opened={opened}

@@ -14,6 +14,7 @@ import {
 import { Link, useParams } from "react-router-dom";
 
 import { ApiError, apiFetch } from "../api/client";
+import ResponsiveTable from "../components/ResponsiveTable";
 import type {
   AccountResponse,
   CategoryResponse,
@@ -136,59 +137,64 @@ export default function AccountDetails() {
         </Card>
       ) : null}
 
-      <Table striped highlightOnHover withTableBorder>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Date</Table.Th>
-            <Table.Th>Description</Table.Th>
-            <Table.Th>Category</Table.Th>
-            <Table.Th ta="right">Amount</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {transactions.map((transaction) => {
-            const category = transaction.category_id
-              ? categoryLookup.get(transaction.category_id)
-              : null;
-            return (
-              <Table.Tr key={transaction.id}>
-                <Table.Td>{formatDate(transaction.occurred_at)}</Table.Td>
-                <Table.Td>
-                  <Stack gap={0}>
-                    <Text>{transaction.merchant ?? "No description"}</Text>
-                    {transaction.note ? (
-                      <Text size="xs" c="dimmed">
-                        {transaction.note}
+      <ResponsiveTable minWidth={700}>
+        <Table striped highlightOnHover withTableBorder>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Date</Table.Th>
+              <Table.Th>Description</Table.Th>
+              <Table.Th>Category</Table.Th>
+              <Table.Th ta="right">Amount</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {transactions.map((transaction) => {
+              const category = transaction.category_id
+                ? categoryLookup.get(transaction.category_id)
+                : null;
+              return (
+                <Table.Tr key={transaction.id}>
+                  <Table.Td>{formatDate(transaction.occurred_at)}</Table.Td>
+                  <Table.Td>
+                    <Stack gap={0}>
+                      <Text>{transaction.merchant ?? "No description"}</Text>
+                      {transaction.note ? (
+                        <Text size="xs" c="dimmed">
+                          {transaction.note}
+                        </Text>
+                      ) : null}
+                    </Stack>
+                  </Table.Td>
+                  <Table.Td>
+                    {category ? (
+                      <Text>
+                        {category.icon ? `${category.icon} ` : ""}
+                        {category.name}
                       </Text>
-                    ) : null}
-                  </Stack>
-                </Table.Td>
-                <Table.Td>
-                  {category ? (
-                    <Text>{category.icon ? `${category.icon} ` : ""}{category.name}</Text>
-                  ) : (
-                    <Text c="dimmed">Uncategorized</Text>
-                  )}
-                </Table.Td>
-                <Table.Td ta="right">
-                  <Text c={transaction.direction === "IN" ? "teal" : "red"} fw={600}>
-                    {transaction.direction === "IN" ? "+" : "-"}${transaction.amount}
+                    ) : (
+                      <Text c="dimmed">Uncategorized</Text>
+                    )}
+                  </Table.Td>
+                  <Table.Td ta="right">
+                    <Text c={transaction.direction === "IN" ? "teal" : "red"} fw={600}>
+                      {transaction.direction === "IN" ? "+" : "-"}${transaction.amount}
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
+            {!loading && transactions.length === 0 ? (
+              <Table.Tr>
+                <Table.Td colSpan={4}>
+                  <Text c="dimmed" ta="center">
+                    No transactions for this account yet.
                   </Text>
                 </Table.Td>
               </Table.Tr>
-            );
-          })}
-          {!loading && transactions.length === 0 ? (
-            <Table.Tr>
-              <Table.Td colSpan={4}>
-                <Text c="dimmed" ta="center">
-                  No transactions for this account yet.
-                </Text>
-              </Table.Td>
-            </Table.Tr>
-          ) : null}
-        </Table.Tbody>
-      </Table>
+            ) : null}
+          </Table.Tbody>
+        </Table>
+      </ResponsiveTable>
 
       <Group justify="center">
         <Pagination value={page} onChange={setPage} total={totalPages} />

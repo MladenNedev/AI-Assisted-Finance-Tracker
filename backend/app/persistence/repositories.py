@@ -541,6 +541,7 @@ def _category_amounts_subquery(
         .where(
             Account.user_id == user_id,
             Transaction.direction == direction.value,
+            Transaction.transfer_id.is_(None),
             Transaction.occurred_at >= occurred_from,
             Transaction.occurred_at < occurred_to,
         )
@@ -557,6 +558,7 @@ def _category_amounts_subquery(
         .where(
             Account.user_id == user_id,
             Transaction.direction == direction.value,
+            Transaction.transfer_id.is_(None),
             Transaction.occurred_at >= occurred_from,
             Transaction.occurred_at < occurred_to,
             Transaction.category_id.is_not(None),
@@ -797,6 +799,7 @@ class ReportingRepository:
             .join(Account, Account.id == Transaction.account_id)
             .where(
                 Account.user_id == user_id,
+                Transaction.transfer_id.is_(None),
                 Transaction.occurred_at >= from_date,
                 Transaction.occurred_at < to_date,
             )
@@ -850,6 +853,7 @@ class ReportingRepository:
             .join(Account, Account.id == Transaction.account_id)
             .where(
                 Account.user_id == user_id,
+                Transaction.transfer_id.is_(None),
                 Transaction.occurred_at >= from_date,
                 Transaction.occurred_at < to_date,
             )
@@ -1056,6 +1060,7 @@ class ReportingRepository:
             .where(
                 Account.user_id == user_id,
                 Transaction.direction == direction.value,
+                Transaction.transfer_id.is_(None),
                 Transaction.occurred_at >= from_date,
                 Transaction.occurred_at < to_date,
             )
@@ -1073,6 +1078,7 @@ class ReportingRepository:
             .where(
                 Account.user_id == user_id,
                 Transaction.direction == direction.value,
+                Transaction.transfer_id.is_(None),
                 Transaction.occurred_at >= from_date,
                 Transaction.occurred_at < to_date,
                 Transaction.category_id.is_not(None),
