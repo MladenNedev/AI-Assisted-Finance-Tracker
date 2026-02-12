@@ -1,6 +1,6 @@
 import { AppShell, Button, Group, Menu, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Accounts from "./pages/Accounts";
@@ -24,11 +24,17 @@ const NAV_ITEMS = [
 function AppLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const isCompactNav = useMediaQuery("(max-width: 760px)") ?? false;
   const isStackedHeader = useMediaQuery("(max-width: 1035px)") ?? false;
   const headerHeight =
     user && (isCompactNav || isStackedHeader) ? (isCompactNav ? 72 : 96) : 56;
   const showInlineNav = Boolean(user && !isCompactNav);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <AppShell padding="md" header={{ height: headerHeight }}>
@@ -40,7 +46,7 @@ function AppLayout() {
           isStackedHeader={isStackedHeader}
           showInlineNav={showInlineNav}
           locationPath={location.pathname}
-          logout={logout}
+          logout={handleLogout}
         />
       </AppShell.Header>
       <AppShell.Main>
