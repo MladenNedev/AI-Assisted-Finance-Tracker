@@ -1,4 +1,10 @@
-import { AppShell, Button, Group, Text } from "@mantine/core";
+import {
+  AppShell,
+  Button,
+  Group,
+  Text,
+  useMantineColorScheme,
+} from "@mantine/core";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -14,6 +20,7 @@ import Recurring from "./pages/Recurring";
 function AppLayout() {
   const { user } = useAuth();
   const location = useLocation();
+  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
 
   return (
     <AppShell padding="md" header={{ height: 56 }}>
@@ -74,9 +81,14 @@ function AppLayout() {
               </Group>
             ) : null}
           </Group>
-          <Text size="sm" c="dimmed">
-            {user ? user.email : "Not signed in"}
-          </Text>
+          <Group gap="sm">
+            <Button variant="subtle" size="xs" onClick={() => toggleColorScheme()}>
+              {colorScheme === "dark" ? "Light mode" : "Dark mode"}
+            </Button>
+            <Text size="sm" c="dimmed">
+              {user ? user.email : "Not signed in"}
+            </Text>
+          </Group>
         </Group>
       </AppShell.Header>
       <AppShell.Main>
