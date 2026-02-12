@@ -1,6 +1,7 @@
+from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Mapping, TypeVar
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Select, case, exists, func, or_, select, union_all
@@ -20,10 +21,8 @@ from app.persistence.models import (
     User,
 )
 
-TEntity = TypeVar("TEntity")
 
-
-async def _apply_updates(
+async def _apply_updates[TEntity](
     session: AsyncSession,
     entity: TEntity | None,
     updates: Mapping[str, object],
@@ -769,19 +768,14 @@ class ReportingRepository:
         direction: TransactionDirection,
         use_splits: bool,
     ) -> Select[tuple[datetime, UUID | None, Decimal]]:
-        category_column = (
-            TransactionSplit.category_id if use_splits else Transaction.category_id
-        )
+        category_column = TransactionSplit.category_id if use_splits else Transaction.category_id
         amount_column = TransactionSplit.amount if use_splits else Transaction.amount
 
-        stmt = (
-            select(
-                period_expr.label("period"),
-                category_column.label("category_id"),
-                func.coalesce(func.sum(amount_column), Decimal("0")).label("amount"),
-            )
-            .select_from(TransactionSplit if use_splits else Transaction)
-        )
+        stmt = select(
+            period_expr.label("period"),
+            category_column.label("category_id"),
+            func.coalesce(func.sum(amount_column), Decimal("0")).label("amount"),
+        ).select_from(TransactionSplit if use_splits else Transaction)
 
         if use_splits:
             stmt = stmt.join(Transaction, Transaction.id == TransactionSplit.transaction_id)
