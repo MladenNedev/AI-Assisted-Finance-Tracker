@@ -23,6 +23,7 @@ import {
 
 import { API_BASE_URL, ApiError, apiFetch, getCsrfToken } from "../api/client";
 import ResponsiveTable from "../components/ResponsiveTable";
+import { formatDateTime } from "../utils/date";
 import type {
   AccountResponse,
   CategoryResponse,
@@ -737,7 +738,7 @@ export default function Transactions() {
                       }
                     />
                   </Table.Td>
-                  <Table.Td>{formatDate(transaction.occurred_at)}</Table.Td>
+                  <Table.Td>{formatDateTime(transaction.occurred_at)}</Table.Td>
                   <Table.Td>
                     <Stack gap={0}>
                       <Text>
@@ -858,7 +859,12 @@ export default function Transactions() {
             <NumberInput
               label="Amount"
               value={useSplits ? splitTotal : form.amount}
-              onChange={(value) => setForm((current) => ({ ...current, amount: value }))}
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  amount: typeof value === "number" && !Number.isNaN(value) ? value : "",
+                }))
+              }
               min={0}
               decimalScale={2}
               fixedDecimalScale
@@ -1253,20 +1259,6 @@ function emptyTransferForm(defaultAccountId = ""): TransferFormState {
     occurred_at: toDateTimeLocal(new Date().toISOString()),
     note: "",
   };
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
 }
 
 function toDateTimeLocal(isoDateString: string): string {

@@ -193,8 +193,8 @@ export default function Accounts() {
                     {goalTarget ? (
                       <Stack gap={4}>
                         <Text size="xs" c="dimmed">
-                          {account.goal_name ? account.goal_name : "Goal"} · $
-                          {goalTarget.toFixed(2)}
+                          {account.goal_name ? account.goal_name : "Goal"} ·{" "}
+                          {formatCurrency(goalTarget, account.currency)}
                         </Text>
                         <Progress value={goalPercent ?? 0} size="sm" />
                       </Stack>
@@ -341,6 +341,20 @@ export default function Accounts() {
       </Modal>
     </Stack>
   );
+}
+
+function formatCurrency(value: number, currency?: string) {
+  if (!currency) {
+    return `$${value.toFixed(2)}`;
+  }
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
 }
 
 function emptyForm(): CreateAccountRequest {
