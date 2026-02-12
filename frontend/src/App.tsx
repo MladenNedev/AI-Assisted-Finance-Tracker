@@ -42,66 +42,14 @@ function AppLayout() {
   return (
     <AppShell padding="md" header={{ height: headerHeight }}>
       <AppShell.Header>
-        <Group
-          h="100%"
-          px="md"
-          py="xs"
-          justify="space-between"
-          align="center"
-          wrap="wrap"
-        >
-          <Group gap="sm" wrap="wrap" style={{ flex: 1 }}>
-            <Text fw={700}>Capital Flow</Text>
-            {showInlineNav ? (
-              <Group gap="xs" wrap="wrap">
-                {navItems.map((item) => (
-                  <Button
-                    key={item.to}
-                    component={Link}
-                    to={item.to}
-                    size="xs"
-                    variant={location.pathname.startsWith(item.to) ? "light" : "subtle"}
-                  >
-                    {item.label}
-                  </Button>
-                ))}
-              </Group>
-            ) : null}
-          </Group>
-          <Group
-            gap="sm"
-            align="center"
-            wrap="wrap"
-            w={isCompactNav ? undefined : isStackedHeader ? "100%" : undefined}
-          >
-            {user && isCompactNav ? (
-              <Menu shadow="md" width={200} position="bottom-end">
-                <Menu.Target>
-                  <Button size="xs" variant="light">
-                    Menu
-                  </Button>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  <Menu.Label>{user.email}</Menu.Label>
-                  {navItems.map((item) => (
-                    <Menu.Item
-                      key={item.to}
-                      component={Link}
-                      to={item.to}
-                    >
-                      {item.label}
-                    </Menu.Item>
-                  ))}
-                </Menu.Dropdown>
-              </Menu>
-            ) : null}
-            {!isCompactNav ? (
-              <Text size="sm" c="dimmed" lineClamp={1} maw={220} title={user?.email}>
-                {user ? user.email : "Not signed in"}
-              </Text>
-            ) : null}
-          </Group>
-        </Group>
+        <HeaderNav
+          userEmail={user?.email}
+          navItems={navItems}
+          isCompactNav={isCompactNav}
+          isStackedHeader={isStackedHeader}
+          showInlineNav={showInlineNav}
+          locationPath={location.pathname}
+        />
       </AppShell.Header>
       <AppShell.Main>
         <Routes>
@@ -167,6 +115,85 @@ function AppLayout() {
         </Routes>
       </AppShell.Main>
     </AppShell>
+  );
+}
+
+type NavItem = { label: string; to: string };
+
+type HeaderNavProps = {
+  userEmail?: string;
+  navItems: NavItem[];
+  isCompactNav: boolean;
+  isStackedHeader: boolean;
+  showInlineNav: boolean;
+  locationPath: string;
+};
+
+function HeaderNav({
+  userEmail,
+  navItems,
+  isCompactNav,
+  isStackedHeader,
+  showInlineNav,
+  locationPath,
+}: HeaderNavProps) {
+  return (
+    <Group
+      h="100%"
+      px="md"
+      py="xs"
+      justify="space-between"
+      align="center"
+      wrap="wrap"
+    >
+      <Group gap="sm" wrap="wrap" style={{ flex: 1 }}>
+        <Text fw={700}>Capital Flow</Text>
+        {userEmail && showInlineNav ? (
+          <Group gap="xs" wrap="wrap">
+            {navItems.map((item) => (
+              <Button
+                key={item.to}
+                component={Link}
+                to={item.to}
+                size="xs"
+                variant={locationPath.startsWith(item.to) ? "light" : "subtle"}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </Group>
+        ) : null}
+      </Group>
+      <Group
+        gap="sm"
+        align="center"
+        wrap="wrap"
+        w={isCompactNav ? undefined : isStackedHeader ? "100%" : undefined}
+      >
+        {userEmail && isCompactNav ? (
+          <Menu shadow="md" width={200} position="bottom-end">
+            <Menu.Target>
+              <Button size="xs" variant="light">
+                Menu
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Label>{userEmail}</Menu.Label>
+              {navItems.map((item) => (
+                <Menu.Item key={item.to} component={Link} to={item.to}>
+                  {item.label}
+                </Menu.Item>
+              ))}
+            </Menu.Dropdown>
+          </Menu>
+        ) : null}
+        {!isCompactNav ? (
+          <Text size="sm" c="dimmed" lineClamp={1} maw={220} title={userEmail}>
+            {userEmail ?? "Not signed in"}
+          </Text>
+        ) : null}
+      </Group>
+    </Group>
   );
 }
 
