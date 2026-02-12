@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.api.deps import get_auth_service, get_current_user
 from app.core.config import get_settings
@@ -16,6 +16,7 @@ from app.persistence.repositories import (
     TransactionRepository,
 )
 from app.schemas.auth import (
+    DemoResetResponse,
     LoginRequest,
     LoginResponse,
     LogoutResponse,
@@ -149,3 +150,26 @@ async def logout(
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: Annotated[User, Depends(get_current_user)]) -> UserResponse:
     return UserResponse.model_validate(current_user)
+
+
+@router.post("/demo/reset", response_model=DemoResetResponse)
+async def reset_demo(
+    current_user: Annotated[User, Depends(get_current_user)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+) -> DemoResetResponse:
+    settings = get_settings()
+    if not settings.demo_seed_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demo disabled")
+    if current_user.email.lower() != settings.demo_email.lower():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    seeder = DemoSeedService(
+        session=auth_service.session,
+        account_repository=AccountRepository(auth_service.session),
+        category_repository=CategoryRepository(auth_service.session),
+        budget_repository=BudgetRepository(auth_service.session),
+        transaction_repository=TransactionRepository(auth_service.session),
+        recurring_repository=RecurringTransactionRepository(auth_service.session),
+    )
+    await seeder.reset_demo(current_user)
+    return DemoResetResponse(status="ok")

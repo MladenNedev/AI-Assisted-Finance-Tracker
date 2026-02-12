@@ -16,6 +16,10 @@ import { useAuth } from "../contexts/AuthContext";
 export default function Login() {
   const navigate = useNavigate();
   const { login, register } = useAuth();
+  const demoEmail =
+    import.meta.env.VITE_DEMO_EMAIL ?? "demo@finance-tracker.app";
+  const demoPassword =
+    import.meta.env.VITE_DEMO_PASSWORD ?? "Demo1234!";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -32,6 +36,26 @@ export default function Login() {
         await register({ email, password });
       }
       await login({ email, password });
+      navigate("/dashboard", { replace: true });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setErrorMessage(`Authentication failed (HTTP ${error.status})`);
+      } else {
+        setErrorMessage("Authentication failed");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const onDemoLogin = async () => {
+    setErrorMessage(null);
+    setSubmitting(true);
+    setIsRegisterMode(false);
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    try {
+      await login({ email: demoEmail, password: demoPassword });
       navigate("/dashboard", { replace: true });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -74,6 +98,9 @@ export default function Login() {
             )}
             <Button type="submit" loading={submitting}>
               {isRegisterMode ? "Register and sign in" : "Sign in"}
+            </Button>
+            <Button variant="light" onClick={onDemoLogin} disabled={submitting}>
+              Try demo account
             </Button>
             <Anchor
               component="button"
