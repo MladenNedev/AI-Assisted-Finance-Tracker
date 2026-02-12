@@ -8,9 +8,10 @@
       "build": "vite build",
       "preview": "vite preview --host 0.0.0.0 --port 5173"
     },
-    "dependencies": {
+  "dependencies": {
     "@mantine/core": "^7.0.0",
     "@mantine/hooks": "^7.0.0",
+    "@mantine/notifications": "^7.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.30.1",
