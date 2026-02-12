@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Container,
   Grid,
   Group,
   Loader,
@@ -176,7 +177,7 @@ export default function Dashboard() {
     if (!categoryTrend) {
       return { data: [], keys: [] as Array<{ key: string; label: string; color: string }> };
     }
-    const byPeriod = new Map<string, Record<string, number>>();
+    const byPeriod = new Map<string, Record<string, number | string>>();
     const labels = new Map<string, { label: string; color: string }>();
 
     for (const point of categoryTrend.points) {
@@ -192,8 +193,8 @@ export default function Dashboard() {
     }
 
     const data = Array.from(byPeriod.values()).sort((a, b) => {
-      const left = new Date(String(a.period)).getTime();
-      const right = new Date(String(b.period)).getTime();
+      const left = new Date(String(a.period ?? "")).getTime();
+      const right = new Date(String(b.period ?? "")).getTime();
       return left - right;
     });
     const keys = Array.from(labels.entries()).map(([key, meta]) => ({
@@ -237,166 +238,199 @@ export default function Dashboard() {
   );
 
   return (
-    <Stack mt="md" gap="md">
-      <Group justify="space-between" align="center">
-        <Title order={2}>Reporting Dashboard</Title>
-        <Group>
-          <Select
-            value={period}
-            onChange={(value) => setPeriod((value as ReportPeriod) ?? "month")}
-            data={PERIOD_OPTIONS}
-            w={160}
-          />
-          {period === "custom" ? (
-            <Group>
-              <TextInput
-                label="From"
-                type="date"
-                value={customFrom}
-                onChange={(event) => setCustomFrom(event.currentTarget.value)}
-              />
-              <TextInput
-                label="To"
-                type="date"
-                value={customTo}
-                onChange={(event) => setCustomTo(event.currentTarget.value)}
-              />
-            </Group>
-          ) : null}
-          <Select
-            value={exportType}
-            onChange={(value) => setExportType(value ?? "cashflow")}
-            data={EXPORT_OPTIONS}
-            w={180}
-          />
-          <Button variant="light" onClick={onExportCsv} loading={exporting} disabled={!summary}>
-            Export CSV
-          </Button>
-          <Button variant="subtle" onClick={() => setCustomizeOpen(true)}>
-            Customize
-          </Button>
-          <Button variant="outline" onClick={openQuickAdd}>
-            Quick add
-          </Button>
-          <Button variant="light" onClick={onLogout}>
-            Logout
-          </Button>
-        </Group>
-      </Group>
-
-      <Text c="dimmed" size="sm">
-        Signed in as {user?.email}
-      </Text>
-
-      {error ? (
-        <Alert color="red" title="Failed to load dashboard">
-          {error}
-        </Alert>
-      ) : null}
-
-      {exportError ? (
-        <Alert color="red" title="Export failed">
-          {exportError}
-        </Alert>
-      ) : null}
-
-      {loading ? (
-        <Group justify="center" py="xl">
-          <Loader />
-        </Group>
-      ) : null}
-
-      {!loading && summary ? (
-        <>
-          <Grid>
-            <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
-              <SummaryCard label="Income" value={summary.income} color="teal" />
-            </Grid.Col>
-            <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
-              <SummaryCard label="Expenses" value={summary.expenses} color="red" />
-            </Grid.Col>
-            <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
-              <SummaryCard label="Net Cashflow" value={summary.net} />
-            </Grid.Col>
-            <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
-              <SummaryCard label="Total Balance" value={summary.total_balance} color="blue" />
-            </Grid.Col>
-          </Grid>
-
-          <Grid>
-            {sectionVisibility.cashflow ? (
-              <Grid.Col span={{ base: 12, lg: sectionVisibility.categories ? 8 : 12 }}>
-                <Card withBorder radius="md" p="lg">
-                  <Title order={4} mb="md">
-                    Cashflow Trend
-                  </Title>
-                  <ResponsiveContainer width="100%" height={320}>
-                    <LineChart data={cashflowSeries}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="label" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="income" stroke="#2F9E44" strokeWidth={2} />
-                      <Line type="monotone" dataKey="expenses" stroke="#E03131" strokeWidth={2} />
-                      <Line type="monotone" dataKey="net" stroke="#1C7ED6" strokeWidth={2} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </Card>
-              </Grid.Col>
+    <Container size={1200} w="100%">
+      <Stack mt="md" gap="md">
+        <Group justify="space-between" align="center">
+          <Title order={2}>Reporting Dashboard</Title>
+          <Group gap="xs">
+            <Select
+              value={period}
+              onChange={(value) => setPeriod((value as ReportPeriod) ?? "month")}
+              data={PERIOD_OPTIONS}
+              w={160}
+            />
+            {period === "custom" ? (
+              <Group>
+                <TextInput
+                  label="From"
+                  type="date"
+                  value={customFrom}
+                  onChange={(event) => setCustomFrom(event.currentTarget.value)}
+                />
+                <TextInput
+                  label="To"
+                  type="date"
+                  value={customTo}
+                  onChange={(event) => setCustomTo(event.currentTarget.value)}
+                />
+              </Group>
             ) : null}
+            <Select
+              value={exportType}
+              onChange={(value) => setExportType(value ?? "cashflow")}
+              data={EXPORT_OPTIONS}
+              w={180}
+            />
+            <Button
+              variant="light"
+              size="sm"
+              radius="md"
+              onClick={onExportCsv}
+              loading={exporting}
+              disabled={!summary}
+            >
+              Export CSV
+            </Button>
+            <Button variant="light" size="sm" radius="md" onClick={() => setCustomizeOpen(true)}>
+              Customize
+            </Button>
+            <Button variant="light" size="sm" radius="md" onClick={openQuickAdd}>
+              Quick add
+            </Button>
+            <Button variant="light" size="sm" radius="md" color="red" onClick={onLogout}>
+              Logout
+            </Button>
+          </Group>
+        </Group>
 
-            {sectionVisibility.categories ? (
-              <Grid.Col span={{ base: 12, lg: sectionVisibility.cashflow ? 4 : 12 }}>
-                <Card withBorder radius="md" p="lg">
-                  <Title order={4} mb="md">
-                    Expense Categories
-                  </Title>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <PieChart>
-                      <Pie
-                        data={categorySeries}
-                        dataKey="amount"
-                        nameKey="label"
-                        innerRadius={45}
-                        outerRadius={80}
-                        label
-                      >
-                        {categorySeries.map((item, index) => (
-                          <Cell
-                            key={item.id}
-                            fill={item.color ?? CHART_COLORS[index % CHART_COLORS.length]}
+        <Text c="dimmed" size="sm">
+          Signed in as {user?.email}
+        </Text>
+
+        {error ? (
+          <Alert color="red" title="Failed to load dashboard">
+            {error}
+          </Alert>
+        ) : null}
+
+        {exportError ? (
+          <Alert color="red" title="Export failed">
+            {exportError}
+          </Alert>
+        ) : null}
+
+        {loading ? (
+          <Group justify="center" py="xl">
+            <Loader />
+          </Group>
+        ) : null}
+
+        {!loading && summary ? (
+          <>
+            <Grid>
+              <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
+                <SummaryCard label="Income" value={summary.income} color="teal" />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
+                <SummaryCard label="Expenses" value={summary.expenses} color="red" />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
+                <SummaryCard label="Net Cashflow" value={summary.net} />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
+                <SummaryCard label="Total Balance" value={summary.total_balance} color="blue" />
+              </Grid.Col>
+            </Grid>
+
+            <Grid align="stretch">
+              {sectionVisibility.cashflow ? (
+                <Grid.Col
+                  span={{ base: 12, lg: sectionVisibility.categories ? 8 : 12 }}
+                  style={{ display: "flex" }}
+                >
+                  <Card
+                    withBorder
+                    radius="md"
+                    p="lg"
+                    style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 300 }}
+                  >
+                    <Title order={4} mb="md">
+                      Cashflow Trend
+                    </Title>
+                    <div style={{ flex: 1, minHeight: 320 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={cashflowSeries}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="label" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="income" stroke="#2F9E44" strokeWidth={2} />
+                          <Line
+                            type="monotone"
+                            dataKey="expenses"
+                            stroke="#E03131"
+                            strokeWidth={2}
                           />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <Stack gap={6} mt="sm">
-                    {categorySeries.map((item, index) => (
-                      <Group key={item.id} justify="space-between">
-                        <Group gap={8}>
-                          <div
-                            style={{
-                              width: 10,
-                              height: 10,
-                              borderRadius: 2,
-                              backgroundColor:
-                                item.color ?? CHART_COLORS[index % CHART_COLORS.length],
-                            }}
-                          />
-                          <Text size="sm">{item.label}</Text>
+                          <Line type="monotone" dataKey="net" stroke="#1C7ED6" strokeWidth={2} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </Card>
+                </Grid.Col>
+              ) : null}
+
+              {sectionVisibility.categories ? (
+                <Grid.Col
+                  span={{ base: 12, lg: sectionVisibility.cashflow ? 4 : 12 }}
+                  style={{ display: "flex" }}
+                >
+                  <Card
+                    withBorder
+                    radius="md"
+                    p="lg"
+                    style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 300 }}
+                  >
+                    <Title order={4} mb="md">
+                      Expense Categories
+                    </Title>
+                    <div style={{ flex: 1, minHeight: 240 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={categorySeries}
+                            dataKey="amount"
+                            nameKey="label"
+                            innerRadius={45}
+                            outerRadius={80}
+                            label
+                          >
+                            {categorySeries.map((item, index) => (
+                              <Cell
+                                key={item.id}
+                                fill={item.color ?? CHART_COLORS[index % CHART_COLORS.length]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <Stack gap={6} mt="sm">
+                      {categorySeries.map((item, index) => (
+                        <Group key={item.id} justify="space-between">
+                          <Group gap={8}>
+                            <div
+                              style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: 2,
+                                backgroundColor:
+                                  item.color ?? CHART_COLORS[index % CHART_COLORS.length],
+                              }}
+                            />
+                            <Text size="sm">{item.label}</Text>
+                          </Group>
+                          <Text size="sm" fw={600}>
+                            ${item.amount.toFixed(2)}
+                          </Text>
                         </Group>
-                        <Text size="sm" fw={600}>
-                          ${item.amount.toFixed(2)}
-                        </Text>
-                      </Group>
-                    ))}
-                  </Stack>
-                </Card>
-              </Grid.Col>
-            ) : null}
-          </Grid>
+                      ))}
+                    </Stack>
+                  </Card>
+                </Grid.Col>
+              ) : null}
+            </Grid>
 
           {sectionVisibility.categoryTrend ? (
             <Card withBorder radius="md" p="lg">
@@ -460,10 +494,18 @@ export default function Dashboard() {
           ) : null}
 
           {sectionVisibility.heatmap || sectionVisibility.merchants ? (
-            <Grid>
+            <Grid align="stretch">
               {sectionVisibility.heatmap ? (
-                <Grid.Col span={{ base: 12, lg: sectionVisibility.merchants ? 7 : 12 }}>
-                  <Card withBorder radius="md" p="lg">
+                <Grid.Col
+                  span={{ base: 12, lg: sectionVisibility.merchants ? 7 : 12 }}
+                  style={{ display: "flex" }}
+                >
+                  <Card
+                    withBorder
+                    radius="md"
+                    p="lg"
+                    style={{ flex: 1, display: "flex", flexDirection: "column" }}
+                  >
                     <Group justify="space-between">
                       <Title order={4}>Spending Heatmap</Title>
                       <Text size="xs" c="dimmed">
@@ -475,26 +517,26 @@ export default function Dashboard() {
                         style={{
                           display: "grid",
                           gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                          gridAutoRows: "1fr",
                           gap: 6,
                           marginTop: 12,
+                          minHeight: 220,
+                          height: 220,
+                          alignContent: "start",
                         }}
                       >
-                        {heatmapGrid.weeks.flat().map((day, index) =>
-                          day ? (
-                            <div
-                              key={day.key}
-                              title={`${day.label}: $${day.amount.toFixed(2)}`}
-                              style={{
-                                height: 20,
-                                borderRadius: 4,
-                                backgroundColor: heatmapColor(day.amount, heatmapGrid.max),
-                                border: "1px solid rgba(0,0,0,0.05)",
-                              }}
-                            />
-                          ) : (
-                            <div key={`empty-${index}`} style={{ height: 20 }} />
-                          ),
-                        )}
+                        {heatmapGrid.weeks.flat().map((day) => (
+                          <div
+                            key={day.key}
+                            title={`${day.label}: $${day.amount.toFixed(2)}`}
+                            style={{
+                              height: "100%",
+                              borderRadius: 4,
+                              backgroundColor: heatmapColor(day.amount, heatmapGrid.max),
+                              border: "1px solid rgba(0,0,0,0.05)",
+                            }}
+                          />
+                        ))}
                       </div>
                     ) : (
                       <Text c="dimmed" size="sm" mt="sm">
@@ -505,8 +547,16 @@ export default function Dashboard() {
                 </Grid.Col>
               ) : null}
               {sectionVisibility.merchants ? (
-                <Grid.Col span={{ base: 12, lg: sectionVisibility.heatmap ? 5 : 12 }}>
-                  <Card withBorder radius="md" p="lg">
+                <Grid.Col
+                  span={{ base: 12, lg: sectionVisibility.heatmap ? 5 : 12 }}
+                  style={{ display: "flex" }}
+                >
+                  <Card
+                    withBorder
+                    radius="md"
+                    p="lg"
+                    style={{ flex: 1, display: "flex", flexDirection: "column" }}
+                  >
                     <Group justify="space-between">
                       <Title order={4}>Top Merchants</Title>
                       <Text size="xs" c="dimmed">
@@ -640,7 +690,15 @@ export default function Dashboard() {
             <NumberInput
               label="Amount"
               value={quickForm.amount}
-              onChange={(value) => setQuickForm((current) => ({ ...current, amount: value }))}
+              onChange={(value) => {
+                const normalized =
+                  typeof value === "number"
+                    ? value
+                    : value === "" || value === null
+                      ? ""
+                      : Number(value);
+                setQuickForm((current) => ({ ...current, amount: normalized }));
+              }}
               min={0}
               decimalScale={2}
               fixedDecimalScale
@@ -738,7 +796,8 @@ export default function Dashboard() {
           </Text>
         </Stack>
       </Modal>
-    </Stack>
+      </Stack>
+    </Container>
   );
 
   async function loadDashboard(
@@ -1011,7 +1070,7 @@ function formatPeriodLabel(value: string, granularity: ReportGranularity): strin
 }
 
 function buildHeatmapGrid(heatmap: HeatmapResponse | null): {
-  weeks: Array<Array<{ key: string; amount: number; label: string } | null>>;
+  weeks: Array<Array<{ key: string; amount: number; label: string }>>;
   max: number;
 } {
   if (!heatmap) {
@@ -1048,12 +1107,7 @@ function buildHeatmapGrid(heatmap: HeatmapResponse | null): {
     return { weeks: [], max };
   }
 
-  const days: Array<{ key: string; amount: number; label: string } | null> = [];
-  const startDow = (startDate.getUTCDay() + 6) % 7;
-  for (let i = 0; i < startDow; i += 1) {
-    days.push(null);
-  }
-
+  const days: Array<{ key: string; amount: number; label: string }> = [];
   const formatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
   for (
     let cursor = new Date(startDate);
@@ -1065,7 +1119,7 @@ function buildHeatmapGrid(heatmap: HeatmapResponse | null): {
     days.push({ key, amount, label: formatter.format(cursor) });
   }
 
-  const weeks: Array<Array<{ key: string; amount: number; label: string } | null>> = [];
+  const weeks: Array<Array<{ key: string; amount: number; label: string }>> = [];
   for (let i = 0; i < days.length; i += 7) {
     weeks.push(days.slice(i, i + 7));
   }

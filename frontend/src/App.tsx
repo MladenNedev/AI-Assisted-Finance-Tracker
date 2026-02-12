@@ -27,7 +27,7 @@ function AppLayout() {
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="sm">
-            <Text fw={700}>Finance Tracker</Text>
+            <Text fw={700}>Capital Flow</Text>
             {user ? (
               <Group gap="xs">
                 <Button
