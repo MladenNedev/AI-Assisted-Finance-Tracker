@@ -2,6 +2,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_auth_service, get_current_user
 from app.core.config import get_settings
@@ -28,6 +29,17 @@ from app.services.demo_seed_service import DemoSeedService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
+
+
+def _build_demo_seeder(session: AsyncSession) -> DemoSeedService:
+    return DemoSeedService(
+        session=session,
+        account_repository=AccountRepository(session),
+        category_repository=CategoryRepository(session),
+        budget_repository=BudgetRepository(session),
+        transaction_repository=TransactionRepository(session),
+        recurring_repository=RecurringTransactionRepository(session),
+    )
 
 
 async def enforce_login_rate_limit(request: Request) -> None:
@@ -112,14 +124,7 @@ async def login(
     response.headers[settings.csrf_header_name] = csrf_token
 
     if settings.demo_seed_enabled and user.email.lower() == settings.demo_email.lower():
-        seeder = DemoSeedService(
-            session=auth_service.session,
-            account_repository=AccountRepository(auth_service.session),
-            category_repository=CategoryRepository(auth_service.session),
-            budget_repository=BudgetRepository(auth_service.session),
-            transaction_repository=TransactionRepository(auth_service.session),
-            recurring_repository=RecurringTransactionRepository(auth_service.session),
-        )
+        seeder = _build_demo_seeder(auth_service.session)
         try:
             await seeder.seed_if_needed(user)
         except Exception:
@@ -165,6 +170,7 @@ async def me(current_user: Annotated[User, Depends(get_current_user)]) -> UserRe
 async def reset_demo(
     current_user: Annotated[User, Depends(get_current_user)],
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    _: Annotated[None, Depends(enforce_login_rate_limit)],
 ) -> DemoResetResponse:
     settings = get_settings()
     if not settings.demo_seed_enabled:
@@ -172,13 +178,13 @@ async def reset_demo(
     if current_user.email.lower() != settings.demo_email.lower():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
-    seeder = DemoSeedService(
-        session=auth_service.session,
-        account_repository=AccountRepository(auth_service.session),
-        category_repository=CategoryRepository(auth_service.session),
-        budget_repository=BudgetRepository(auth_service.session),
-        transaction_repository=TransactionRepository(auth_service.session),
-        recurring_repository=RecurringTransactionRepository(auth_service.session),
-    )
-    await seeder.reset_demo(current_user)
+    seeder = _build_demo_seeder(auth_service.session)
+    try:
+        await seeder.reset_demo(current_user)
+    except Exception as err:
+        logger.exception("Failed to reset demo data")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reset demo",
+        ) from err
     return DemoResetResponse(status="ok")

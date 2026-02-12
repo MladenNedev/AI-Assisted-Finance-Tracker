@@ -30,7 +30,8 @@ export function useAccountDetailsData(
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const categoryLookup = useMemo(
@@ -41,9 +42,11 @@ export function useAccountDetailsData(
   useEffect(() => {
     if (!accountId) {
       setError("Account id missing from route");
-      setLoading(false);
+      setAccountLoading(false);
+      setTransactionsLoading(false);
       return;
     }
+    setPage(1);
     void loadAccount(accountId);
     void loadCategories();
   }, [accountId]);
@@ -56,6 +59,7 @@ export function useAccountDetailsData(
   }, [accountId, page]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_LIMIT));
+  const loading = accountLoading || transactionsLoading;
 
   return {
     account,
@@ -70,7 +74,7 @@ export function useAccountDetailsData(
   };
 
   async function loadAccount(id: string) {
-    setLoading(true);
+    setAccountLoading(true);
     setError(null);
     try {
       const response = await apiFetch<AccountResponse>(`/accounts/${id}`);
@@ -78,12 +82,12 @@ export function useAccountDetailsData(
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     } finally {
-      setLoading(false);
+      setAccountLoading(false);
     }
   }
 
   async function loadTransactions(id: string, targetPage: number) {
-    setLoading(true);
+    setTransactionsLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
@@ -99,11 +103,12 @@ export function useAccountDetailsData(
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     } finally {
-      setLoading(false);
+      setTransactionsLoading(false);
     }
   }
 
   async function loadCategories() {
+    setError(null);
     try {
       const response = await apiFetch<PaginatedResponse<CategoryResponse>>(
         "/categories?limit=500&offset=0",

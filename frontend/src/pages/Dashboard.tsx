@@ -584,24 +584,26 @@ export default function Dashboard() {
                     {merchantSummary && merchantSummary.merchants.length ? (
                       <ResponsiveTable minWidth={420}>
                         <Table mt="sm" highlightOnHover>
-                          <thead>
-                            <tr>
-                              <th>Merchant</th>
-                              <th style={{ textAlign: "right" }}>Total</th>
-                              <th style={{ textAlign: "right" }}>Count</th>
-                            </tr>
-                          </thead>
-                          <tbody>
+                          <Table.Thead>
+                            <Table.Tr>
+                              <Table.Th>Merchant</Table.Th>
+                              <Table.Th style={{ textAlign: "right" }}>Total</Table.Th>
+                              <Table.Th style={{ textAlign: "right" }}>Count</Table.Th>
+                            </Table.Tr>
+                          </Table.Thead>
+                          <Table.Tbody>
                             {merchantSummary.merchants.map((merchant) => (
-                              <tr key={merchant.merchant}>
-                                <td>{merchant.merchant}</td>
-                                <td style={{ textAlign: "right" }}>
+                              <Table.Tr key={merchant.merchant}>
+                                <Table.Td>{merchant.merchant}</Table.Td>
+                                <Table.Td style={{ textAlign: "right" }}>
                                   ${toNumber(merchant.total).toFixed(2)}
-                                </td>
-                                <td style={{ textAlign: "right" }}>{merchant.count}</td>
-                              </tr>
+                                </Table.Td>
+                                <Table.Td style={{ textAlign: "right" }}>
+                                  {merchant.count}
+                                </Table.Td>
+                              </Table.Tr>
                             ))}
-                          </tbody>
+                          </Table.Tbody>
                         </Table>
                       </ResponsiveTable>
                     ) : (

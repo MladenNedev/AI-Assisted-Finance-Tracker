@@ -1,6 +1,7 @@
 import { Stack, Table, Text } from "@mantine/core";
 
 import ResponsiveTable from "../ResponsiveTable";
+import { formatDateTime } from "../../utils/date";
 import type { CategoryResponse, TransactionResponse } from "../../api/types";
 
 type AccountTransactionsTableProps = {
@@ -32,7 +33,7 @@ export default function AccountTransactionsTable({
               : null;
             return (
               <Table.Tr key={transaction.id}>
-                <Table.Td>{formatDate(transaction.occurred_at)}</Table.Td>
+                <Table.Td>{formatDateTime(transaction.occurred_at)}</Table.Td>
                 <Table.Td>
                   <Stack gap={0}>
                     <Text>{transaction.merchant ?? "No description"}</Text>
@@ -74,18 +75,4 @@ export default function AccountTransactionsTable({
       </Table>
     </ResponsiveTable>
   );
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
 }
