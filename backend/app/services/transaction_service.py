@@ -147,6 +147,7 @@ class TransactionService:
                 note=normalized_note,
                 transfer_id=transfer_id,
             )
+        await self.session.commit()
         await cache.bump_user_report_version(user_id)
         reloaded_outgoing = await self.transaction_repository.get_by_id(outgoing.id, user_id)
         reloaded_incoming = await self.transaction_repository.get_by_id(incoming.id, user_id)
