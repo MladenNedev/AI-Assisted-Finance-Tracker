@@ -50,9 +50,9 @@ class Settings(BaseSettings):
     sentry_dsn: str | None = Field(default=None, alias="SENTRY_DSN")
     sentry_environment: str = Field(default="development", alias="SENTRY_ENVIRONMENT")
     sentry_traces_sample_rate: float = Field(default=0.1, alias="SENTRY_TRACES_SAMPLE_RATE")
-    sentry_dsn: str | None = Field(default=None, alias="SENTRY_DSN")
-    sentry_environment: str = Field(default="development", alias="SENTRY_ENVIRONMENT")
-    sentry_traces_sample_rate: float = Field(default=0.1, alias="SENTRY_TRACES_SAMPLE_RATE")
+    demo_seed_enabled: bool = Field(default=False, alias="DEMO_SEED_ENABLED")
+    demo_email: str = Field(default="demo@finance-tracker.app", alias="DEMO_EMAIL")
+    demo_password: str = Field(default="Demo1234!", alias="DEMO_PASSWORD")
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> Self:

@@ -3,6 +3,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Grid,
   Group,
   Loader,
@@ -16,6 +17,8 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { useHotkeys, useLocalStorage } from "@mantine/hooks";
+import { notifications } from "@mantine/notifications";
 import { useNavigate } from "react-router-dom";
 import {
   CartesianGrid,
@@ -90,6 +93,20 @@ export default function Dashboard() {
   const [quickCategories, setQuickCategories] = useState<CategoryResponse[]>([]);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [sectionVisibility, setSectionVisibility] = useLocalStorage<Record<string, boolean>>({
+    key: "dashboard-sections",
+    defaultValue: {
+      cashflow: true,
+      categories: true,
+      categoryTrend: true,
+      netWorth: true,
+      heatmap: true,
+      merchants: true,
+      budgets: true,
+      accounts: true,
+    },
+  });
   const [quickForm, setQuickForm] = useState({
     account_id: "",
     amount: 0 as number | "",
@@ -112,6 +129,12 @@ export default function Dashboard() {
     }
     void loadDashboard(period);
   }, [period, customFrom, customTo]);
+
+  useHotkeys([
+    ["mod+shift+a", () => openQuickAdd()],
+    ["mod+shift+c", () => setCustomizeOpen(true)],
+    ["mod+shift+e", () => summary && onExportCsv()],
+  ]);
 
   const onLogout = async () => {
     await logout();
@@ -249,6 +272,9 @@ export default function Dashboard() {
           <Button variant="light" onClick={onExportCsv} loading={exporting} disabled={!summary}>
             Export CSV
           </Button>
+          <Button variant="subtle" onClick={() => setCustomizeOpen(true)}>
+            Customize
+          </Button>
           <Button variant="outline" onClick={openQuickAdd}>
             Quick add
           </Button>
@@ -298,274 +324,292 @@ export default function Dashboard() {
           </Grid>
 
           <Grid>
-            <Grid.Col span={{ base: 12, lg: 8 }}>
-              <Card withBorder radius="md" p="lg">
-                <Title order={4} mb="md">
-                  Cashflow Trend
-                </Title>
-                <ResponsiveContainer width="100%" height={320}>
-                  <LineChart data={cashflowSeries}>
+            {sectionVisibility.cashflow ? (
+              <Grid.Col span={{ base: 12, lg: sectionVisibility.categories ? 8 : 12 }}>
+                <Card withBorder radius="md" p="lg">
+                  <Title order={4} mb="md">
+                    Cashflow Trend
+                  </Title>
+                  <ResponsiveContainer width="100%" height={320}>
+                    <LineChart data={cashflowSeries}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="label" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="income" stroke="#2F9E44" strokeWidth={2} />
+                      <Line type="monotone" dataKey="expenses" stroke="#E03131" strokeWidth={2} />
+                      <Line type="monotone" dataKey="net" stroke="#1C7ED6" strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Card>
+              </Grid.Col>
+            ) : null}
+
+            {sectionVisibility.categories ? (
+              <Grid.Col span={{ base: 12, lg: sectionVisibility.cashflow ? 4 : 12 }}>
+                <Card withBorder radius="md" p="lg">
+                  <Title order={4} mb="md">
+                    Expense Categories
+                  </Title>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <PieChart>
+                      <Pie
+                        data={categorySeries}
+                        dataKey="amount"
+                        nameKey="label"
+                        innerRadius={45}
+                        outerRadius={80}
+                        label
+                      >
+                        {categorySeries.map((item, index) => (
+                          <Cell
+                            key={item.id}
+                            fill={item.color ?? CHART_COLORS[index % CHART_COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <Stack gap={6} mt="sm">
+                    {categorySeries.map((item, index) => (
+                      <Group key={item.id} justify="space-between">
+                        <Group gap={8}>
+                          <div
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: 2,
+                              backgroundColor:
+                                item.color ?? CHART_COLORS[index % CHART_COLORS.length],
+                            }}
+                          />
+                          <Text size="sm">{item.label}</Text>
+                        </Group>
+                        <Text size="sm" fw={600}>
+                          ${item.amount.toFixed(2)}
+                        </Text>
+                      </Group>
+                    ))}
+                  </Stack>
+                </Card>
+              </Grid.Col>
+            ) : null}
+          </Grid>
+
+          {sectionVisibility.categoryTrend ? (
+            <Card withBorder radius="md" p="lg">
+              <Title order={4} mb="md">
+                Category Trend
+              </Title>
+              {categoryTrendSeries.data.length ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={categoryTrendSeries.data}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="period"
+                      tickFormatter={(value) =>
+                        formatPeriodLabel(String(value), categoryTrend?.granularity ?? "day")
+                      }
+                    />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    {categoryTrendSeries.keys.map((item) => (
+                      <Line
+                        key={item.key}
+                        type="monotone"
+                        dataKey={item.key}
+                        name={item.label}
+                        stroke={item.color}
+                        strokeWidth={2}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <Text c="dimmed" size="sm">
+                  No category trend data yet.
+                </Text>
+              )}
+            </Card>
+          ) : null}
+
+          {sectionVisibility.netWorth ? (
+            <Card withBorder radius="md" p="lg">
+              <Title order={4} mb="md">
+                Net Worth Trend
+              </Title>
+              {netWorthSeries.length ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={netWorthSeries}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="label" />
                     <YAxis />
                     <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="income" stroke="#2F9E44" strokeWidth={2} />
-                    <Line type="monotone" dataKey="expenses" stroke="#E03131" strokeWidth={2} />
-                    <Line type="monotone" dataKey="net" stroke="#1C7ED6" strokeWidth={2} />
+                    <Line type="monotone" dataKey="balance" stroke="#1C7ED6" strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
-              </Card>
-            </Grid.Col>
+              ) : (
+                <Text c="dimmed" size="sm">
+                  No net worth data yet.
+                </Text>
+              )}
+            </Card>
+          ) : null}
 
-            <Grid.Col span={{ base: 12, lg: 4 }}>
-              <Card withBorder radius="md" p="lg">
-                <Title order={4} mb="md">
-                  Expense Categories
-                </Title>
-                <ResponsiveContainer width="100%" height={260}>
-                  <PieChart>
-                    <Pie
-                      data={categorySeries}
-                      dataKey="amount"
-                      nameKey="label"
-                      innerRadius={45}
-                      outerRadius={80}
-                      label
-                    >
-                      {categorySeries.map((item, index) => (
-                        <Cell
-                          key={item.id}
-                          fill={item.color ?? CHART_COLORS[index % CHART_COLORS.length]}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-                <Stack gap={6} mt="sm">
-                  {categorySeries.map((item, index) => (
-                    <Group key={item.id} justify="space-between">
-                      <Group gap={8}>
-                        <div
-                          style={{
-                            width: 10,
-                            height: 10,
-                            borderRadius: 2,
-                            backgroundColor:
-                              item.color ?? CHART_COLORS[index % CHART_COLORS.length],
-                          }}
-                        />
-                        <Text size="sm">{item.label}</Text>
-                      </Group>
-                      <Text size="sm" fw={600}>
-                        ${item.amount.toFixed(2)}
+          {sectionVisibility.heatmap || sectionVisibility.merchants ? (
+            <Grid>
+              {sectionVisibility.heatmap ? (
+                <Grid.Col span={{ base: 12, lg: sectionVisibility.merchants ? 7 : 12 }}>
+                  <Card withBorder radius="md" p="lg">
+                    <Group justify="space-between">
+                      <Title order={4}>Spending Heatmap</Title>
+                      <Text size="xs" c="dimmed">
+                        Daily expenses
                       </Text>
                     </Group>
+                    {heatmapGrid.weeks.length ? (
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                          gap: 6,
+                          marginTop: 12,
+                        }}
+                      >
+                        {heatmapGrid.weeks.flat().map((day, index) =>
+                          day ? (
+                            <div
+                              key={day.key}
+                              title={`${day.label}: $${day.amount.toFixed(2)}`}
+                              style={{
+                                height: 20,
+                                borderRadius: 4,
+                                backgroundColor: heatmapColor(day.amount, heatmapGrid.max),
+                                border: "1px solid rgba(0,0,0,0.05)",
+                              }}
+                            />
+                          ) : (
+                            <div key={`empty-${index}`} style={{ height: 20 }} />
+                          ),
+                        )}
+                      </div>
+                    ) : (
+                      <Text c="dimmed" size="sm" mt="sm">
+                        No heatmap data yet.
+                      </Text>
+                    )}
+                  </Card>
+                </Grid.Col>
+              ) : null}
+              {sectionVisibility.merchants ? (
+                <Grid.Col span={{ base: 12, lg: sectionVisibility.heatmap ? 5 : 12 }}>
+                  <Card withBorder radius="md" p="lg">
+                    <Group justify="space-between">
+                      <Title order={4}>Top Merchants</Title>
+                      <Text size="xs" c="dimmed">
+                        Expenses
+                      </Text>
+                    </Group>
+                    {merchantSummary && merchantSummary.merchants.length ? (
+                      <Table mt="sm" highlightOnHover>
+                        <thead>
+                          <tr>
+                            <th>Merchant</th>
+                            <th style={{ textAlign: "right" }}>Total</th>
+                            <th style={{ textAlign: "right" }}>Count</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {merchantSummary.merchants.map((merchant) => (
+                            <tr key={merchant.merchant}>
+                              <td>{merchant.merchant}</td>
+                              <td style={{ textAlign: "right" }}>
+                                ${toNumber(merchant.total).toFixed(2)}
+                              </td>
+                              <td style={{ textAlign: "right" }}>{merchant.count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    ) : (
+                      <Text c="dimmed" size="sm" mt="sm">
+                        No merchant data yet.
+                      </Text>
+                    )}
+                  </Card>
+                </Grid.Col>
+              ) : null}
+            </Grid>
+          ) : null}
+
+          {sectionVisibility.budgets ? (
+            <Card withBorder radius="md" p="lg">
+              <Group justify="space-between">
+                <Title order={4}>Budget Overview (Current Month)</Title>
+                <Button variant="subtle" size="xs" onClick={() => navigate("/budgets")}>
+                  View all budgets
+                </Button>
+              </Group>
+              {budgetProgress === null ? (
+                <Text c="dimmed" size="sm" mt="sm">
+                  Budget overview unavailable.
+                </Text>
+              ) : budgetProgress.items.length === 0 ? (
+                <Text c="dimmed" size="sm" mt="sm">
+                  No budgets configured for this month.
+                </Text>
+              ) : (
+                <Stack gap="sm" mt="sm">
+                  {budgetProgress.items.slice(0, 3).map((item) => (
+                    <div key={item.budget_id}>
+                      <Group justify="space-between" mb={6}>
+                        <Text size="sm" fw={600}>
+                          {item.category_name}
+                        </Text>
+                        <Text size="sm" c="dimmed">
+                          ${item.spent_amount} / ${item.limit_amount}
+                        </Text>
+                      </Group>
+                      <Progress
+                        value={Math.min(item.percentage_used, 100)}
+                        color={budgetStatusColor(item.status)}
+                        size="md"
+                      />
+                    </div>
                   ))}
                 </Stack>
-              </Card>
-            </Grid.Col>
-          </Grid>
+              )}
+            </Card>
+          ) : null}
 
-          <Card withBorder radius="md" p="lg">
-            <Title order={4} mb="md">
-              Category Trend
-            </Title>
-            {categoryTrendSeries.data.length ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={categoryTrendSeries.data}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="period"
-                    tickFormatter={(value) =>
-                      formatPeriodLabel(String(value), categoryTrend?.granularity ?? "day")
-                    }
-                  />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  {categoryTrendSeries.keys.map((item) => (
-                    <Line
-                      key={item.key}
-                      type="monotone"
-                      dataKey={item.key}
-                      name={item.label}
-                      stroke={item.color}
-                      strokeWidth={2}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <Text c="dimmed" size="sm">
-                No category trend data yet.
-              </Text>
-            )}
-          </Card>
-
-          <Card withBorder radius="md" p="lg">
-            <Title order={4} mb="md">
-              Net Worth Trend
-            </Title>
-            {netWorthSeries.length ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={netWorthSeries}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="balance" stroke="#1C7ED6" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <Text c="dimmed" size="sm">
-                No net worth data yet.
-              </Text>
-            )}
-          </Card>
-
-          <Grid>
-            <Grid.Col span={{ base: 12, lg: 7 }}>
-              <Card withBorder radius="md" p="lg">
-                <Group justify="space-between">
-                  <Title order={4}>Spending Heatmap</Title>
-                  <Text size="xs" c="dimmed">
-                    Daily expenses
-                  </Text>
-                </Group>
-                {heatmapGrid.weeks.length ? (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-                      gap: 6,
-                      marginTop: 12,
-                    }}
-                  >
-                    {heatmapGrid.weeks.flat().map((day, index) =>
-                      day ? (
-                        <div
-                          key={day.key}
-                          title={`${day.label}: $${day.amount.toFixed(2)}`}
-                          style={{
-                            height: 20,
-                            borderRadius: 4,
-                            backgroundColor: heatmapColor(day.amount, heatmapGrid.max),
-                            border: "1px solid rgba(0,0,0,0.05)",
-                          }}
-                        />
-                      ) : (
-                        <div key={`empty-${index}`} style={{ height: 20 }} />
-                      ),
-                    )}
-                  </div>
-                ) : (
-                  <Text c="dimmed" size="sm" mt="sm">
-                    No heatmap data yet.
-                  </Text>
-                )}
-              </Card>
-            </Grid.Col>
-            <Grid.Col span={{ base: 12, lg: 5 }}>
-              <Card withBorder radius="md" p="lg">
-                <Group justify="space-between">
-                  <Title order={4}>Top Merchants</Title>
-                  <Text size="xs" c="dimmed">
-                    Expenses
-                  </Text>
-                </Group>
-                {merchantSummary && merchantSummary.merchants.length ? (
-                  <Table mt="sm" highlightOnHover>
-                    <thead>
-                      <tr>
-                        <th>Merchant</th>
-                        <th style={{ textAlign: "right" }}>Total</th>
-                        <th style={{ textAlign: "right" }}>Count</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {merchantSummary.merchants.map((merchant) => (
-                        <tr key={merchant.merchant}>
-                          <td>{merchant.merchant}</td>
-                          <td style={{ textAlign: "right" }}>
-                            ${toNumber(merchant.total).toFixed(2)}
-                          </td>
-                          <td style={{ textAlign: "right" }}>{merchant.count}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                ) : (
-                  <Text c="dimmed" size="sm" mt="sm">
-                    No merchant data yet.
-                  </Text>
-                )}
-              </Card>
-            </Grid.Col>
-          </Grid>
-
-          <Card withBorder radius="md" p="lg">
-            <Group justify="space-between">
-              <Title order={4}>Budget Overview (Current Month)</Title>
-              <Button variant="subtle" size="xs" onClick={() => navigate("/budgets")}>
-                View all budgets
-              </Button>
-            </Group>
-            {budgetProgress === null ? (
-              <Text c="dimmed" size="sm" mt="sm">
-                Budget overview unavailable.
-              </Text>
-            ) : budgetProgress.items.length === 0 ? (
-              <Text c="dimmed" size="sm" mt="sm">
-                No budgets configured for this month.
-              </Text>
-            ) : (
-              <Stack gap="sm" mt="sm">
-                {budgetProgress.items.slice(0, 3).map((item) => (
-                  <div key={item.budget_id}>
-                    <Group justify="space-between" mb={6}>
-                      <Text size="sm" fw={600}>
-                        {item.category_name}
-                      </Text>
-                      <Text size="sm" c="dimmed">
-                        ${item.spent_amount} / ${item.limit_amount}
+          {sectionVisibility.accounts ? (
+            <Card withBorder radius="md" p="lg">
+              <Group justify="space-between">
+                <Title order={4}>Account Balances</Title>
+                <Text size="sm" c="dimmed">
+                  {summary.account_count} active accounts
+                </Text>
+              </Group>
+              <Stack gap={8} mt="sm">
+                {summary.accounts.map((account) => (
+                  <Group key={account.account_id} justify="space-between">
+                    <Group gap={8}>
+                      <Text fw={500}>{account.account_name}</Text>
+                      <Text size="xs" c="dimmed">
+                        {account.account_type}
                       </Text>
                     </Group>
-                    <Progress
-                      value={Math.min(item.percentage_used, 100)}
-                      color={budgetStatusColor(item.status)}
-                      size="md"
-                    />
-                  </div>
-                ))}
-              </Stack>
-            )}
-          </Card>
-
-          <Card withBorder radius="md" p="lg">
-            <Group justify="space-between">
-              <Title order={4}>Account Balances</Title>
-              <Text size="sm" c="dimmed">
-                {summary.account_count} active accounts
-              </Text>
-            </Group>
-            <Stack gap={8} mt="sm">
-              {summary.accounts.map((account) => (
-                <Group key={account.account_id} justify="space-between">
-                  <Group gap={8}>
-                    <Text fw={500}>{account.account_name}</Text>
-                    <Text size="xs" c="dimmed">
-                      {account.account_type}
+                    <Text fw={600}>
+                      {account.currency} {toNumber(account.balance).toFixed(2)}
                     </Text>
                   </Group>
-                  <Text fw={600}>
-                    {account.currency} {toNumber(account.balance).toFixed(2)}
-                  </Text>
-                </Group>
-              ))}
-            </Stack>
-          </Card>
+                ))}
+              </Stack>
+            </Card>
+          ) : null}
         </>
       ) : null}
 
@@ -656,6 +700,42 @@ export default function Dashboard() {
           <Button onClick={submitQuickAdd} loading={quickSubmitting}>
             Add transaction
           </Button>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={customizeOpen}
+        onClose={() => setCustomizeOpen(false)}
+        title="Customize dashboard"
+        centered
+      >
+        <Stack gap="sm">
+          {[
+            { key: "cashflow", label: "Cashflow trend" },
+            { key: "categories", label: "Expense categories" },
+            { key: "categoryTrend", label: "Category trend" },
+            { key: "netWorth", label: "Net worth trend" },
+            { key: "heatmap", label: "Spending heatmap" },
+            { key: "merchants", label: "Top merchants" },
+            { key: "budgets", label: "Budget overview" },
+            { key: "accounts", label: "Account balances" },
+          ].map((item) => (
+            <Checkbox
+              key={item.key}
+              label={item.label}
+              checked={Boolean(sectionVisibility[item.key])}
+              onChange={(event) =>
+                setSectionVisibility((current) => ({
+                  ...current,
+                  [item.key]: event.currentTarget.checked,
+                }))
+              }
+            />
+          ))}
+          <Text size="xs" c="dimmed">
+            Shortcuts: Ctrl/Cmd + Shift + A (quick add), Ctrl/Cmd + Shift + C (customize), Ctrl/Cmd
+            + Shift + E (export CSV)
+          </Text>
         </Stack>
       </Modal>
     </Stack>
@@ -796,6 +876,11 @@ export default function Dashboard() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      notifications.show({
+        title: "Export ready",
+        message: "CSV download started.",
+        color: "teal",
+      });
     } catch (requestError) {
       setExportError(getErrorMessage(requestError));
     } finally {
@@ -844,6 +929,11 @@ export default function Dashboard() {
       };
       await apiFetch("/transactions", { method: "POST", body: JSON.stringify(payload) });
       setQuickOpen(false);
+      notifications.show({
+        title: "Transaction added",
+        message: "Your transaction is now recorded.",
+        color: "teal",
+      });
       await loadDashboard(period);
     } catch (requestError) {
       setQuickError(getErrorMessage(requestError));
