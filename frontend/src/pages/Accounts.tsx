@@ -16,6 +16,7 @@ import {
 } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { ApiError, apiFetch } from "../api/client";
+import ResponsiveTable from "../components/ResponsiveTable";
 import type {
   AccountResponse,
   AccountType,
@@ -145,92 +146,98 @@ export default function Accounts() {
         </Alert>
       ) : null}
 
-      <Table striped highlightOnHover withTableBorder>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Name</Table.Th>
-            <Table.Th>Type</Table.Th>
-            <Table.Th>Currency</Table.Th>
-            <Table.Th>Goal</Table.Th>
-            <Table.Th ta="right">Opening</Table.Th>
-            <Table.Th ta="right">Current</Table.Th>
-            <Table.Th ta="right">Actions</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {accounts.map((account) => {
-            const goalTarget = account.goal_target_amount
-              ? Number.parseFloat(account.goal_target_amount)
-              : null;
-            const current = Number.parseFloat(account.current_balance || "0");
-            const goalPercent =
-              goalTarget && goalTarget > 0 ? Math.min(100, (current / goalTarget) * 100) : null;
-            return (
-            <Table.Tr key={account.id}>
-              <Table.Td>
-                <Group gap="xs">
-                  {account.color ? (
-                    <div
-                      style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: "50%",
-                        backgroundColor: account.color
-                      }}
-                    />
-                  ) : null}
-                  {account.icon ? <Text>{account.icon}</Text> : null}
-                  <Text>{account.name}</Text>
-                </Group>
-              </Table.Td>
-              <Table.Td>{account.account_type}</Table.Td>
-              <Table.Td>{account.currency}</Table.Td>
-              <Table.Td>
-                {goalTarget ? (
-                  <Stack gap={4}>
-                    <Text size="xs" c="dimmed">
-                      {account.goal_name ? account.goal_name : "Goal"} · ${goalTarget.toFixed(2)}
-                    </Text>
-                    <Progress value={goalPercent ?? 0} size="sm" />
-                  </Stack>
-                ) : (
-                  <Text size="xs" c="dimmed">
-                    No goal
-                  </Text>
-                )}
-              </Table.Td>
-              <Table.Td ta="right">{account.opening_balance}</Table.Td>
-              <Table.Td ta="right">{account.current_balance}</Table.Td>
-              <Table.Td ta="right">
-                <Button
-                  component={Link}
-                  to={`/accounts/${account.id}`}
-                  size="xs"
-                  variant="subtle"
-                >
-                  View
-                </Button>
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  onClick={() => onOpenEdit(account)}
-                >
-                  Edit
-                </Button>
-              </Table.Td>
-            </Table.Tr>
-          )})}
-          {!loading && accounts.length === 0 ? (
+      <ResponsiveTable minWidth={880}>
+        <Table striped highlightOnHover withTableBorder>
+          <Table.Thead>
             <Table.Tr>
-              <Table.Td colSpan={7}>
-                <Text c="dimmed" ta="center">
-                  No accounts yet.
-                </Text>
-              </Table.Td>
+              <Table.Th>Name</Table.Th>
+              <Table.Th>Type</Table.Th>
+              <Table.Th>Currency</Table.Th>
+              <Table.Th>Goal</Table.Th>
+              <Table.Th ta="right">Opening</Table.Th>
+              <Table.Th ta="right">Current</Table.Th>
+              <Table.Th ta="right">Actions</Table.Th>
             </Table.Tr>
-          ) : null}
-        </Table.Tbody>
-      </Table>
+          </Table.Thead>
+          <Table.Tbody>
+            {accounts.map((account) => {
+              const goalTarget = account.goal_target_amount
+                ? Number.parseFloat(account.goal_target_amount)
+                : null;
+              const current = Number.parseFloat(account.current_balance || "0");
+              const goalPercent =
+                goalTarget && goalTarget > 0
+                  ? Math.min(100, (current / goalTarget) * 100)
+                  : null;
+              return (
+                <Table.Tr key={account.id}>
+                  <Table.Td>
+                    <Group gap="xs">
+                      {account.color ? (
+                        <div
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: "50%",
+                            backgroundColor: account.color
+                          }}
+                        />
+                      ) : null}
+                      {account.icon ? <Text>{account.icon}</Text> : null}
+                      <Text>{account.name}</Text>
+                    </Group>
+                  </Table.Td>
+                  <Table.Td>{account.account_type}</Table.Td>
+                  <Table.Td>{account.currency}</Table.Td>
+                  <Table.Td>
+                    {goalTarget ? (
+                      <Stack gap={4}>
+                        <Text size="xs" c="dimmed">
+                          {account.goal_name ? account.goal_name : "Goal"} ·{" "}
+                          {formatCurrency(goalTarget, account.currency)}
+                        </Text>
+                        <Progress value={goalPercent ?? 0} size="sm" />
+                      </Stack>
+                    ) : (
+                      <Text size="xs" c="dimmed">
+                        No goal
+                      </Text>
+                    )}
+                  </Table.Td>
+                  <Table.Td ta="right">{account.opening_balance}</Table.Td>
+                  <Table.Td ta="right">{account.current_balance}</Table.Td>
+                  <Table.Td ta="right">
+                    <Button
+                      component={Link}
+                      to={`/accounts/${account.id}`}
+                      size="xs"
+                      variant="subtle"
+                    >
+                      View
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      onClick={() => onOpenEdit(account)}
+                    >
+                      Edit
+                    </Button>
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
+            {!loading && accounts.length === 0 ? (
+              <Table.Tr>
+                <Table.Td colSpan={7}>
+                  <Text c="dimmed" ta="center">
+                    No accounts yet.
+                  </Text>
+                </Table.Td>
+              </Table.Tr>
+            ) : null}
+          </Table.Tbody>
+        </Table>
+      </ResponsiveTable>
 
       <Modal
         opened={opened}
@@ -334,6 +341,20 @@ export default function Accounts() {
       </Modal>
     </Stack>
   );
+}
+
+function formatCurrency(value: number, currency?: string) {
+  if (!currency) {
+    return `$${value.toFixed(2)}`;
+  }
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
 }
 
 function emptyForm(): CreateAccountRequest {

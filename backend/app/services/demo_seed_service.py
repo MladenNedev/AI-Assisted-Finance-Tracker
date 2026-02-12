@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import cache
@@ -24,7 +25,16 @@ from app.domain.transaction import (
     validate_transaction_amount,
     validate_transaction_direction,
 )
-from app.persistence.models import RecurringTransaction, User
+from app.persistence.models import (
+    Account,
+    Budget,
+    Category,
+    RecurringTransaction,
+    Transaction,
+    TransactionAttachment,
+    TransactionSplit,
+    User,
+)
 from app.persistence.repositories import (
     AccountRepository,
     BudgetRepository,
@@ -67,6 +77,51 @@ class DemoSeedService:
 
         await self._seed(user.id)
         return True
+
+    async def reset_demo(self, user: User) -> bool:
+        if not self.settings.demo_seed_enabled:
+            return False
+
+        if user.email.lower() != self.settings.demo_email.lower():
+            return False
+
+        await self._clear_user_data(user.id)
+        await self._seed(user.id)
+        return True
+
+    async def _clear_user_data(self, user_id: UUID) -> None:
+        account_rows = await self.session.execute(
+            select(Account.id).where(Account.user_id == user_id)
+        )
+        account_ids = [row[0] for row in account_rows.all()]
+
+        if account_ids:
+            transaction_rows = await self.session.execute(
+                select(Transaction.id).where(Transaction.account_id.in_(account_ids))
+            )
+            transaction_ids = [row[0] for row in transaction_rows.all()]
+
+            if transaction_ids:
+                await self.session.execute(
+                    delete(TransactionAttachment).where(
+                        TransactionAttachment.transaction_id.in_(transaction_ids)
+                    )
+                )
+                await self.session.execute(
+                    delete(TransactionSplit).where(
+                        TransactionSplit.transaction_id.in_(transaction_ids)
+                    )
+                )
+                await self.session.execute(
+                    delete(Transaction).where(Transaction.id.in_(transaction_ids))
+                )
+
+        await self.session.execute(
+            delete(RecurringTransaction).where(RecurringTransaction.user_id == user_id)
+        )
+        await self.session.execute(delete(Budget).where(Budget.user_id == user_id))
+        await self.session.execute(delete(Category).where(Category.user_id == user_id))
+        await self.session.execute(delete(Account).where(Account.user_id == user_id))
 
     async def _seed(self, user_id: UUID) -> None:
         now = datetime.now(UTC)

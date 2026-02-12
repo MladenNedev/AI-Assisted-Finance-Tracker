@@ -1,11 +1,6 @@
-import {
-  AppShell,
-  Button,
-  Group,
-  Text,
-  useMantineColorScheme,
-} from "@mantine/core";
-import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { AppShell, Button, Group, Menu, Text } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Accounts from "./pages/Accounts";
@@ -17,79 +12,42 @@ import Categories from "./pages/Categories";
 import Transactions from "./pages/Transactions";
 import Recurring from "./pages/Recurring";
 
+const NAV_ITEMS = [
+  { label: "Dashboard", to: "/dashboard" },
+  { label: "Accounts", to: "/accounts" },
+  { label: "Transactions", to: "/transactions" },
+  { label: "Categories", to: "/categories" },
+  { label: "Budgets", to: "/budgets" },
+  { label: "Recurring", to: "/recurring" },
+] as const;
+
 function AppLayout() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
-  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
+  const navigate = useNavigate();
+  const isCompactNav = useMediaQuery("(max-width: 760px)") ?? false;
+  const isStackedHeader = useMediaQuery("(max-width: 1035px)") ?? false;
+  const headerHeight =
+    user && (isCompactNav || isStackedHeader) ? (isCompactNav ? 72 : 96) : 56;
+  const showInlineNav = Boolean(user && !isCompactNav);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
-    <AppShell padding="md" header={{ height: 56 }}>
+    <AppShell padding="md" header={{ height: headerHeight }}>
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group gap="sm">
-            <Text fw={700}>Capital Flow</Text>
-            {user ? (
-              <Group gap="xs">
-                <Button
-                  component={Link}
-                  to="/dashboard"
-                  size="xs"
-                  variant={location.pathname.startsWith("/dashboard") ? "light" : "subtle"}
-                >
-                  Dashboard
-                </Button>
-                <Button
-                  component={Link}
-                  to="/accounts"
-                  size="xs"
-                  variant={location.pathname.startsWith("/accounts") ? "light" : "subtle"}
-                >
-                  Accounts
-                </Button>
-                <Button
-                  component={Link}
-                  to="/transactions"
-                  size="xs"
-                  variant={location.pathname.startsWith("/transactions") ? "light" : "subtle"}
-                >
-                  Transactions
-                </Button>
-                <Button
-                  component={Link}
-                  to="/categories"
-                  size="xs"
-                  variant={location.pathname.startsWith("/categories") ? "light" : "subtle"}
-                >
-                  Categories
-                </Button>
-                <Button
-                  component={Link}
-                  to="/budgets"
-                  size="xs"
-                  variant={location.pathname.startsWith("/budgets") ? "light" : "subtle"}
-                >
-                  Budgets
-                </Button>
-                <Button
-                  component={Link}
-                  to="/recurring"
-                  size="xs"
-                  variant={location.pathname.startsWith("/recurring") ? "light" : "subtle"}
-                >
-                  Recurring
-                </Button>
-              </Group>
-            ) : null}
-          </Group>
-          <Group gap="sm">
-            <Button variant="subtle" size="xs" onClick={() => toggleColorScheme()}>
-              {colorScheme === "dark" ? "Light mode" : "Dark mode"}
-            </Button>
-            <Text size="sm" c="dimmed">
-              {user ? user.email : "Not signed in"}
-            </Text>
-          </Group>
-        </Group>
+        <HeaderNav
+          userEmail={user?.email}
+          navItems={NAV_ITEMS}
+          isCompactNav={isCompactNav}
+          isStackedHeader={isStackedHeader}
+          showInlineNav={showInlineNav}
+          locationPath={location.pathname}
+          logout={handleLogout}
+        />
       </AppShell.Header>
       <AppShell.Main>
         <Routes>
@@ -155,6 +113,91 @@ function AppLayout() {
         </Routes>
       </AppShell.Main>
     </AppShell>
+  );
+}
+
+type NavItem = { label: string; to: string };
+
+type HeaderNavProps = {
+  userEmail?: string;
+  navItems: ReadonlyArray<NavItem>;
+  isCompactNav: boolean;
+  isStackedHeader: boolean;
+  showInlineNav: boolean;
+  locationPath: string;
+  logout: () => Promise<void> | void;
+};
+
+function HeaderNav({
+  userEmail,
+  navItems,
+  isCompactNav,
+  isStackedHeader,
+  showInlineNav,
+  locationPath,
+  logout,
+}: HeaderNavProps) {
+  return (
+    <Group
+      h="100%"
+      px="md"
+      py="xs"
+      justify="space-between"
+      align="center"
+      wrap="wrap"
+    >
+      <Group gap="sm" wrap="wrap" style={{ flex: 1 }}>
+        <Text fw={700}>Capital Flow</Text>
+        {userEmail && showInlineNav ? (
+          <Group gap="xs" wrap="wrap">
+            {navItems.map((item) => (
+              <Button
+                key={item.to}
+                component={Link}
+                to={item.to}
+                size="xs"
+                variant={locationPath.startsWith(item.to) ? "light" : "subtle"}
+              >
+                {item.label}
+              </Button>
+            ))}
+            <Button size="xs" variant="light" onClick={logout}>
+              Logout
+            </Button>
+          </Group>
+        ) : null}
+      </Group>
+      <Group
+        gap="sm"
+        align="center"
+        wrap="wrap"
+        w={isCompactNav ? undefined : isStackedHeader ? "100%" : undefined}
+      >
+        {userEmail && isCompactNav ? (
+          <Menu shadow="md" width={200} position="bottom-end">
+            <Menu.Target>
+              <Button size="xs" variant="light">
+                Menu
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Label>{userEmail}</Menu.Label>
+              {navItems.map((item) => (
+                <Menu.Item key={item.to} component={Link} to={item.to}>
+                  {item.label}
+                </Menu.Item>
+              ))}
+              <Menu.Item onClick={logout}>Logout</Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        ) : null}
+        {!isCompactNav ? (
+          <Text size="sm" c="dimmed" lineClamp={1} maw={220} title={userEmail}>
+            {userEmail ?? "Not signed in"}
+          </Text>
+        ) : null}
+      </Group>
+    </Group>
   );
 }
 

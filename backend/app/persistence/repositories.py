@@ -1,5 +1,7 @@
+from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Select, case, exists, func, or_, select, union_all
@@ -18,6 +20,19 @@ from app.persistence.models import (
     TransactionSplit,
     User,
 )
+
+
+async def _apply_updates[TEntity](
+    session: AsyncSession,
+    entity: TEntity | None,
+    updates: Mapping[str, object],
+) -> TEntity | None:
+    if entity is None:
+        return None
+    for field_name, value in updates.items():
+        setattr(entity, field_name, value)
+    await session.flush()
+    return entity
 
 
 class UserRepository:
@@ -137,14 +152,7 @@ class AccountRepository:
 
     async def update(self, account_id: UUID, user_id: UUID, **updates: object) -> Account | None:
         account = await self.get_by_id(account_id, user_id, include_inactive=True)
-        if account is None:
-            return None
-
-        for field_name, value in updates.items():
-            setattr(account, field_name, value)
-
-        await self.session.flush()
-        return account
+        return await _apply_updates(self.session, account, updates)
 
     async def deactivate(self, account_id: UUID, user_id: UUID) -> Account | None:
         account = await self.get_by_id(account_id, user_id, include_inactive=True)
@@ -321,14 +329,7 @@ class TransactionRepository:
         self, transaction_id: UUID, user_id: UUID, **updates: object
     ) -> Transaction | None:
         transaction = await self.get_by_id(transaction_id, user_id)
-        if transaction is None:
-            return None
-
-        for field_name, value in updates.items():
-            setattr(transaction, field_name, value)
-
-        await self.session.flush()
-        return transaction
+        return await _apply_updates(self.session, transaction, updates)
 
     async def delete(self, transaction_id: UUID, user_id: UUID) -> bool:
         transaction = await self.get_by_id(transaction_id, user_id)
@@ -506,12 +507,7 @@ class CategoryRepository:
 
     async def update(self, category_id: UUID, user_id: UUID, **updates: object) -> Category | None:
         category = await self.get_by_id(category_id, user_id)
-        if category is None:
-            return None
-        for field_name, value in updates.items():
-            setattr(category, field_name, value)
-        await self.session.flush()
-        return category
+        return await _apply_updates(self.session, category, updates)
 
     async def delete(self, category_id: UUID, user_id: UUID) -> bool:
         category = await self.get_by_id(category_id, user_id)
@@ -541,6 +537,7 @@ def _category_amounts_subquery(
         .where(
             Account.user_id == user_id,
             Transaction.direction == direction.value,
+            Transaction.transfer_id.is_(None),
             Transaction.occurred_at >= occurred_from,
             Transaction.occurred_at < occurred_to,
         )
@@ -557,6 +554,7 @@ def _category_amounts_subquery(
         .where(
             Account.user_id == user_id,
             Transaction.direction == direction.value,
+            Transaction.transfer_id.is_(None),
             Transaction.occurred_at >= occurred_from,
             Transaction.occurred_at < occurred_to,
             Transaction.category_id.is_not(None),
@@ -760,6 +758,44 @@ class ReportingRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    def _build_category_trend_stmt(
+        self,
+        *,
+        period_expr: Any,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        direction: TransactionDirection,
+        use_splits: bool,
+    ) -> Select[tuple[datetime, UUID | None, Decimal]]:
+        category_column = TransactionSplit.category_id if use_splits else Transaction.category_id
+        amount_column = TransactionSplit.amount if use_splits else Transaction.amount
+
+        stmt = select(
+            period_expr.label("period"),
+            category_column.label("category_id"),
+            func.coalesce(func.sum(amount_column), Decimal("0")).label("amount"),
+        ).select_from(TransactionSplit if use_splits else Transaction)
+
+        if use_splits:
+            stmt = stmt.join(Transaction, Transaction.id == TransactionSplit.transaction_id)
+
+        stmt = stmt.join(Account, Account.id == Transaction.account_id).where(
+            Account.user_id == user_id,
+            Transaction.direction == direction.value,
+            Transaction.transfer_id.is_(None),
+            Transaction.occurred_at >= from_date,
+            Transaction.occurred_at < to_date,
+        )
+
+        if not use_splits:
+            stmt = stmt.where(
+                Transaction.category_id.is_not(None),
+                ~exists().where(TransactionSplit.transaction_id == Transaction.id),
+            )
+
+        return stmt.group_by(period_expr, category_column)
+
     async def get_cashflow_summary(
         self,
         user_id: UUID,
@@ -797,6 +833,7 @@ class ReportingRepository:
             .join(Account, Account.id == Transaction.account_id)
             .where(
                 Account.user_id == user_id,
+                Transaction.transfer_id.is_(None),
                 Transaction.occurred_at >= from_date,
                 Transaction.occurred_at < to_date,
             )
@@ -850,6 +887,7 @@ class ReportingRepository:
             .join(Account, Account.id == Transaction.account_id)
             .where(
                 Account.user_id == user_id,
+                Transaction.transfer_id.is_(None),
                 Transaction.occurred_at >= from_date,
                 Transaction.occurred_at < to_date,
             )
@@ -1044,41 +1082,21 @@ class ReportingRepository:
         else:
             period_expr = func.date_trunc("day", Transaction.occurred_at)
 
-        split_stmt = (
-            select(
-                period_expr.label("period"),
-                TransactionSplit.category_id.label("category_id"),
-                func.coalesce(func.sum(TransactionSplit.amount), Decimal("0")).label("amount"),
-            )
-            .select_from(TransactionSplit)
-            .join(Transaction, Transaction.id == TransactionSplit.transaction_id)
-            .join(Account, Account.id == Transaction.account_id)
-            .where(
-                Account.user_id == user_id,
-                Transaction.direction == direction.value,
-                Transaction.occurred_at >= from_date,
-                Transaction.occurred_at < to_date,
-            )
-            .group_by(period_expr, TransactionSplit.category_id)
+        split_stmt = self._build_category_trend_stmt(
+            period_expr=period_expr,
+            user_id=user_id,
+            from_date=from_date,
+            to_date=to_date,
+            direction=direction,
+            use_splits=True,
         )
-
-        no_split_stmt = (
-            select(
-                period_expr.label("period"),
-                Transaction.category_id.label("category_id"),
-                func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("amount"),
-            )
-            .select_from(Transaction)
-            .join(Account, Account.id == Transaction.account_id)
-            .where(
-                Account.user_id == user_id,
-                Transaction.direction == direction.value,
-                Transaction.occurred_at >= from_date,
-                Transaction.occurred_at < to_date,
-                Transaction.category_id.is_not(None),
-                ~exists().where(TransactionSplit.transaction_id == Transaction.id),
-            )
-            .group_by(period_expr, Transaction.category_id)
+        no_split_stmt = self._build_category_trend_stmt(
+            period_expr=period_expr,
+            user_id=user_id,
+            from_date=from_date,
+            to_date=to_date,
+            direction=direction,
+            use_splits=False,
         )
 
         combined = union_all(split_stmt, no_split_stmt).subquery()
