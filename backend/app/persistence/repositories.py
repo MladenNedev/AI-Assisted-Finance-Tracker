@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Select, case, exists, func, or_, select, union_all
@@ -762,6 +763,63 @@ class ReportingRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    def _category_trend_split_stmt(
+        self,
+        *,
+        period_expr: Any,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        direction: TransactionDirection,
+    ) -> Select[tuple[datetime, UUID | None, Decimal]]:
+        return (
+            select(
+                period_expr.label("period"),
+                TransactionSplit.category_id.label("category_id"),
+                func.coalesce(func.sum(TransactionSplit.amount), Decimal("0")).label("amount"),
+            )
+            .select_from(TransactionSplit)
+            .join(Transaction, Transaction.id == TransactionSplit.transaction_id)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(
+                Account.user_id == user_id,
+                Transaction.direction == direction.value,
+                Transaction.transfer_id.is_(None),
+                Transaction.occurred_at >= from_date,
+                Transaction.occurred_at < to_date,
+            )
+            .group_by(period_expr, TransactionSplit.category_id)
+        )
+
+    def _category_trend_no_split_stmt(
+        self,
+        *,
+        period_expr: Any,
+        user_id: UUID,
+        from_date: datetime,
+        to_date: datetime,
+        direction: TransactionDirection,
+    ) -> Select[tuple[datetime, UUID | None, Decimal]]:
+        return (
+            select(
+                period_expr.label("period"),
+                Transaction.category_id.label("category_id"),
+                func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("amount"),
+            )
+            .select_from(Transaction)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(
+                Account.user_id == user_id,
+                Transaction.direction == direction.value,
+                Transaction.transfer_id.is_(None),
+                Transaction.occurred_at >= from_date,
+                Transaction.occurred_at < to_date,
+                Transaction.category_id.is_not(None),
+                ~exists().where(TransactionSplit.transaction_id == Transaction.id),
+            )
+            .group_by(period_expr, Transaction.category_id)
+        )
+
     async def get_cashflow_summary(
         self,
         user_id: UUID,
@@ -1048,43 +1106,19 @@ class ReportingRepository:
         else:
             period_expr = func.date_trunc("day", Transaction.occurred_at)
 
-        split_stmt = (
-            select(
-                period_expr.label("period"),
-                TransactionSplit.category_id.label("category_id"),
-                func.coalesce(func.sum(TransactionSplit.amount), Decimal("0")).label("amount"),
-            )
-            .select_from(TransactionSplit)
-            .join(Transaction, Transaction.id == TransactionSplit.transaction_id)
-            .join(Account, Account.id == Transaction.account_id)
-            .where(
-                Account.user_id == user_id,
-                Transaction.direction == direction.value,
-                Transaction.transfer_id.is_(None),
-                Transaction.occurred_at >= from_date,
-                Transaction.occurred_at < to_date,
-            )
-            .group_by(period_expr, TransactionSplit.category_id)
+        split_stmt = self._category_trend_split_stmt(
+            period_expr=period_expr,
+            user_id=user_id,
+            from_date=from_date,
+            to_date=to_date,
+            direction=direction,
         )
-
-        no_split_stmt = (
-            select(
-                period_expr.label("period"),
-                Transaction.category_id.label("category_id"),
-                func.coalesce(func.sum(Transaction.amount), Decimal("0")).label("amount"),
-            )
-            .select_from(Transaction)
-            .join(Account, Account.id == Transaction.account_id)
-            .where(
-                Account.user_id == user_id,
-                Transaction.direction == direction.value,
-                Transaction.transfer_id.is_(None),
-                Transaction.occurred_at >= from_date,
-                Transaction.occurred_at < to_date,
-                Transaction.category_id.is_not(None),
-                ~exists().where(TransactionSplit.transaction_id == Transaction.id),
-            )
-            .group_by(period_expr, Transaction.category_id)
+        no_split_stmt = self._category_trend_no_split_stmt(
+            period_expr=period_expr,
+            user_id=user_id,
+            from_date=from_date,
+            to_date=to_date,
+            direction=direction,
         )
 
         combined = union_all(split_stmt, no_split_stmt).subquery()
