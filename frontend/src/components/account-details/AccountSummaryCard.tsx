@@ -63,7 +63,9 @@ export default function AccountSummaryCard({ account }: AccountSummaryCardProps)
           </Text>
           {goalTarget ? (
             <Stack gap={4}>
-              <Text fw={600}>${goalTarget.toFixed(2)}</Text>
+              <Text fw={600}>
+                {account.currency} {goalTarget.toFixed(2)}
+              </Text>
               <Progress value={goalProgress} size="sm" />
             </Stack>
           ) : (
