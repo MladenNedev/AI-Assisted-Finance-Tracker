@@ -16,7 +16,7 @@ export default function AccountSummaryCard({ account }: AccountSummaryCardProps)
     : null;
   const currentBalance = Number(account.current_balance);
   const goalProgress = goalTarget
-    ? Math.min(100, (currentBalance / goalTarget) * 100)
+    ? Math.max(0, Math.min(100, (currentBalance / goalTarget) * 100))
     : 0;
 
   return (
