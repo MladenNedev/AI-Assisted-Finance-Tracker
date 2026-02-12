@@ -985,7 +985,7 @@ export default function Dashboard() {
         message: "Demo data has been refreshed.",
         color: "teal",
       });
-      await loadDashboard(period);
+      await loadDashboard(period, customFrom, customTo);
     } catch (requestError) {
       notifications.show({
         title: "Reset failed",
@@ -1043,7 +1043,7 @@ export default function Dashboard() {
         message: "Your transaction is now recorded.",
         color: "teal",
       });
-      await loadDashboard(period);
+      await loadDashboard(period, customFrom, customTo);
     } catch (requestError) {
       setQuickError(getErrorMessage(requestError));
     } finally {

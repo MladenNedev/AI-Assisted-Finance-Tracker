@@ -28,7 +28,7 @@ function AppLayout() {
   const isStackedHeader = useMediaQuery("(max-width: 1035px)") ?? false;
   const headerHeight =
     user && (isCompactNav || isStackedHeader) ? (isCompactNav ? 72 : 96) : 56;
-  const showInlineNav = user && !isCompactNav;
+  const showInlineNav = Boolean(user && !isCompactNav);
 
   return (
     <AppShell padding="md" header={{ height: headerHeight }}>
