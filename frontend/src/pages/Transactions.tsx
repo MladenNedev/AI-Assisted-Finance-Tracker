@@ -22,6 +22,7 @@ import {
 } from "@mantine/core";
 
 import { API_BASE_URL, ApiError, apiFetch, getCsrfToken } from "../api/client";
+import ResponsiveTable from "../components/ResponsiveTable";
 import type {
   AccountResponse,
   CategoryResponse,
@@ -681,152 +682,156 @@ export default function Transactions() {
         </Button>
       </Group>
 
-      <Table striped highlightOnHover withTableBorder>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th w={40}>
-              <Checkbox
-                checked={allSelected}
-                indeterminate={someSelected}
-                onChange={(event) => onToggleSelectAll(event.currentTarget.checked)}
-              />
-            </Table.Th>
-            <Table.Th>Date</Table.Th>
-            <Table.Th>Description</Table.Th>
-            <Table.Th>Category</Table.Th>
-            <Table.Th>Account</Table.Th>
-            <Table.Th ta="right">Amount</Table.Th>
-            <Table.Th ta="right">Actions</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-      <Table.Tbody>
-        {transactions.map((transaction) => {
-          const account = accountLookup.get(transaction.account_id);
-          const category = transaction.category_id
-            ? categoryLookup.get(transaction.category_id)
-            : null;
-          const splits = transaction.splits ?? [];
-          const isTransfer = Boolean(transaction.transfer_id);
-          const transferPartner = isTransfer
-            ? transactions.find(
-                (candidate) =>
-                  candidate.transfer_id === transaction.transfer_id &&
-                  candidate.id !== transaction.id,
-              )
-            : null;
-          const transferAccountName = transferPartner
-            ? accountLookup.get(transferPartner.account_id)?.name
-            : null;
-          const transferLabel = isTransfer
-            ? transaction.direction === "OUT"
-              ? `Transfer to ${transferAccountName ?? "account"}`
-              : `Transfer from ${transferAccountName ?? "account"}`
-            : null;
+      <ResponsiveTable minWidth={900}>
+        <Table striped highlightOnHover withTableBorder>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th w={40}>
+                <Checkbox
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  onChange={(event) => onToggleSelectAll(event.currentTarget.checked)}
+                />
+              </Table.Th>
+              <Table.Th>Date</Table.Th>
+              <Table.Th>Description</Table.Th>
+              <Table.Th>Category</Table.Th>
+              <Table.Th>Account</Table.Th>
+              <Table.Th ta="right">Amount</Table.Th>
+              <Table.Th ta="right">Actions</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {transactions.map((transaction) => {
+              const account = accountLookup.get(transaction.account_id);
+              const category = transaction.category_id
+                ? categoryLookup.get(transaction.category_id)
+                : null;
+              const splits = transaction.splits ?? [];
+              const isTransfer = Boolean(transaction.transfer_id);
+              const transferPartner = isTransfer
+                ? transactions.find(
+                    (candidate) =>
+                      candidate.transfer_id === transaction.transfer_id &&
+                      candidate.id !== transaction.id,
+                  )
+                : null;
+              const transferAccountName = transferPartner
+                ? accountLookup.get(transferPartner.account_id)?.name
+                : null;
+              const transferLabel = isTransfer
+                ? transferAccountName
+                  ? transaction.direction === "OUT"
+                    ? `Transfer to ${transferAccountName}`
+                    : `Transfer from ${transferAccountName}`
+                  : "Transfer"
+                : null;
 
-          return (
-            <Table.Tr key={transaction.id}>
-              <Table.Td>
-                  <Checkbox
-                    checked={selectedIds.has(transaction.id)}
-                    onChange={(event) =>
-                      onToggleSelect(transaction.id, event.currentTarget.checked)
-                    }
-                  />
-                </Table.Td>
-                <Table.Td>{formatDate(transaction.occurred_at)}</Table.Td>
-                <Table.Td>
-                  <Stack gap={0}>
-                    <Text>
-                      {transferLabel ?? transaction.merchant ?? "No description"}
-                    </Text>
-                    {transaction.note ? (
-                      <Text size="xs" c="dimmed">
-                        {transaction.note}
+              return (
+                <Table.Tr key={transaction.id}>
+                  <Table.Td>
+                    <Checkbox
+                      checked={selectedIds.has(transaction.id)}
+                      onChange={(event) =>
+                        onToggleSelect(transaction.id, event.currentTarget.checked)
+                      }
+                    />
+                  </Table.Td>
+                  <Table.Td>{formatDate(transaction.occurred_at)}</Table.Td>
+                  <Table.Td>
+                    <Stack gap={0}>
+                      <Text>
+                        {transferLabel ?? transaction.merchant ?? "No description"}
                       </Text>
-                    ) : null}
-                    {transaction.tags && transaction.tags.length ? (
-                      <Group gap={6} mt={4} wrap="wrap">
-                        {transaction.tags.map((tag) => (
-                          <Badge key={tag} size="xs" variant="light" color="gray">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </Group>
-                    ) : null}
-                  </Stack>
-                </Table.Td>
-                <Table.Td>
-                  {isTransfer ? (
-                    <Badge color="blue" variant="light">
-                      Transfer
-                    </Badge>
-                  ) : splits.length > 0 ? (
-                    <Stack gap={4}>
-                      <Badge color="gray" variant="light">
-                        Split transaction
-                      </Badge>
-                      {splits.map((split) => {
-                        const splitCategory = split.category_id
-                          ? categoryLookup.get(split.category_id)
-                          : null;
-                        return (
-                          <Group key={split.id} gap={6} wrap="wrap">
-                            <Badge color={splitCategory?.color ?? "gray"} variant="light">
-                              {splitCategory?.icon ? `${splitCategory.icon} ` : ""}
-                              {splitCategory?.name ?? "Uncategorized"}
+                      {transaction.note ? (
+                        <Text size="xs" c="dimmed">
+                          {transaction.note}
+                        </Text>
+                      ) : null}
+                      {transaction.tags && transaction.tags.length ? (
+                        <Group gap={6} mt={4} wrap="wrap">
+                          {transaction.tags.map((tag) => (
+                            <Badge key={tag} size="xs" variant="light" color="gray">
+                              {tag}
                             </Badge>
-                            <Text size="xs" c="dimmed">
-                              ${split.amount}
-                            </Text>
-                          </Group>
-                        );
-                      })}
+                          ))}
+                        </Group>
+                      ) : null}
                     </Stack>
-                  ) : category ? (
-                    <Badge color={category.color ?? "gray"}>
-                      {category.icon ? `${category.icon} ` : ""}
-                      {category.name}
-                    </Badge>
-                  ) : (
-                    <Badge color="gray">Uncategorized</Badge>
-                  )}
-                </Table.Td>
-                <Table.Td>{account?.name ?? "Unknown account"}</Table.Td>
-                <Table.Td ta="right">
-                  <Text c={transaction.direction === "IN" ? "teal" : "red"} fw={600}>
-                    {transaction.direction === "IN" ? "+" : "-"}${transaction.amount}
+                  </Table.Td>
+                  <Table.Td>
+                    {isTransfer ? (
+                      <Badge color="blue" variant="light">
+                        Transfer
+                      </Badge>
+                    ) : splits.length > 0 ? (
+                      <Stack gap={4}>
+                        <Badge color="gray" variant="light">
+                          Split transaction
+                        </Badge>
+                        {splits.map((split) => {
+                          const splitCategory = split.category_id
+                            ? categoryLookup.get(split.category_id)
+                            : null;
+                          return (
+                            <Group key={split.id} gap={6} wrap="wrap">
+                              <Badge color={splitCategory?.color ?? "gray"} variant="light">
+                                {splitCategory?.icon ? `${splitCategory.icon} ` : ""}
+                                {splitCategory?.name ?? "Uncategorized"}
+                              </Badge>
+                              <Text size="xs" c="dimmed">
+                                ${split.amount}
+                              </Text>
+                            </Group>
+                          );
+                        })}
+                      </Stack>
+                    ) : category ? (
+                      <Badge color={category.color ?? "gray"}>
+                        {category.icon ? `${category.icon} ` : ""}
+                        {category.name}
+                      </Badge>
+                    ) : (
+                      <Badge color="gray">Uncategorized</Badge>
+                    )}
+                  </Table.Td>
+                  <Table.Td>{account?.name ?? "Unknown account"}</Table.Td>
+                  <Table.Td ta="right">
+                    <Text c={transaction.direction === "IN" ? "teal" : "red"} fw={600}>
+                      {transaction.direction === "IN" ? "+" : "-"}${transaction.amount}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group justify="flex-end" gap="xs">
+                      <Button size="xs" variant="subtle" onClick={() => onOpenEdit(transaction)}>
+                        Edit
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="red"
+                        onClick={() => onDelete(transaction)}
+                        loading={submitting}
+                      >
+                        Delete
+                      </Button>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
+            {!loading && transactions.length === 0 ? (
+              <Table.Tr>
+                <Table.Td colSpan={7}>
+                  <Text ta="center" c="dimmed">
+                    No transactions found for current filters.
                   </Text>
                 </Table.Td>
-                <Table.Td>
-                  <Group justify="flex-end" gap="xs">
-                    <Button size="xs" variant="subtle" onClick={() => onOpenEdit(transaction)}>
-                      Edit
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="subtle"
-                      color="red"
-                      onClick={() => onDelete(transaction)}
-                      loading={submitting}
-                    >
-                      Delete
-                    </Button>
-                  </Group>
-                </Table.Td>
               </Table.Tr>
-            );
-          })}
-          {!loading && transactions.length === 0 ? (
-            <Table.Tr>
-              <Table.Td colSpan={7}>
-                <Text ta="center" c="dimmed">
-                  No transactions found for current filters.
-                </Text>
-              </Table.Td>
-            </Table.Tr>
-          ) : null}
-        </Table.Tbody>
-      </Table>
+            ) : null}
+          </Table.Tbody>
+        </Table>
+      </ResponsiveTable>
 
       <Group justify="center">
         <Pagination value={page} onChange={setPage} total={totalPages} />
@@ -1084,7 +1089,10 @@ export default function Transactions() {
             label="Amount"
             value={transferForm.amount}
             onChange={(value) =>
-              setTransferForm((current) => ({ ...current, amount: value }))
+              setTransferForm((current) => ({
+                ...current,
+                amount: typeof value === "number" && !Number.isNaN(value) ? value : "",
+              }))
             }
             min={0}
             decimalScale={2}

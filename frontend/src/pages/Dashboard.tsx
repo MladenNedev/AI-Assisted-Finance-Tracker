@@ -35,6 +35,7 @@ import {
   YAxis,
 } from "recharts";
 import { API_BASE_URL, ApiError, apiFetch } from "../api/client";
+import ResponsiveTable from "../components/ResponsiveTable";
 import { useAuth } from "../contexts/AuthContext";
 import type {
   BudgetProgressResponse,
@@ -69,9 +70,13 @@ const EXPORT_OPTIONS = [
   { value: "category_trend", label: "Category trend" },
 ];
 
+const DEMO_EMAIL =
+  import.meta.env.VITE_DEMO_EMAIL ?? "demo@finance-tracker.app";
+
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const isDemoUser = user?.email?.toLowerCase() === DEMO_EMAIL.toLowerCase();
 
   const [period, setPeriod] = useState<ReportPeriod>("month");
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
@@ -87,6 +92,7 @@ export default function Dashboard() {
   const [exportType, setExportType] = useState<string>("cashflow");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [resettingDemo, setResettingDemo] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSubmitting, setQuickSubmitting] = useState(false);
   const [quickError, setQuickError] = useState<string | null>(null);
@@ -281,6 +287,18 @@ export default function Dashboard() {
             >
               Export CSV
             </Button>
+            {isDemoUser ? (
+              <Button
+                variant="light"
+                size="sm"
+                radius="md"
+                color="orange"
+                onClick={onResetDemo}
+                loading={resettingDemo}
+              >
+                Reset demo
+              </Button>
+            ) : null}
             <Button variant="light" size="sm" radius="md" onClick={() => setCustomizeOpen(true)}>
               Customize
             </Button>
@@ -564,26 +582,28 @@ export default function Dashboard() {
                       </Text>
                     </Group>
                     {merchantSummary && merchantSummary.merchants.length ? (
-                      <Table mt="sm" highlightOnHover>
-                        <thead>
-                          <tr>
-                            <th>Merchant</th>
-                            <th style={{ textAlign: "right" }}>Total</th>
-                            <th style={{ textAlign: "right" }}>Count</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {merchantSummary.merchants.map((merchant) => (
-                            <tr key={merchant.merchant}>
-                              <td>{merchant.merchant}</td>
-                              <td style={{ textAlign: "right" }}>
-                                ${toNumber(merchant.total).toFixed(2)}
-                              </td>
-                              <td style={{ textAlign: "right" }}>{merchant.count}</td>
+                      <ResponsiveTable minWidth={420}>
+                        <Table mt="sm" highlightOnHover>
+                          <thead>
+                            <tr>
+                              <th>Merchant</th>
+                              <th style={{ textAlign: "right" }}>Total</th>
+                              <th style={{ textAlign: "right" }}>Count</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </Table>
+                          </thead>
+                          <tbody>
+                            {merchantSummary.merchants.map((merchant) => (
+                              <tr key={merchant.merchant}>
+                                <td>{merchant.merchant}</td>
+                                <td style={{ textAlign: "right" }}>
+                                  ${toNumber(merchant.total).toFixed(2)}
+                                </td>
+                                <td style={{ textAlign: "right" }}>{merchant.count}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      </ResponsiveTable>
                     ) : (
                       <Text c="dimmed" size="sm" mt="sm">
                         No merchant data yet.
@@ -944,6 +964,34 @@ export default function Dashboard() {
       setExportError(getErrorMessage(requestError));
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function onResetDemo() {
+    if (!isDemoUser) {
+      return;
+    }
+    const confirmed = window.confirm("Reset demo data? This will wipe and re-seed demo data.");
+    if (!confirmed) {
+      return;
+    }
+    setResettingDemo(true);
+    try {
+      await apiFetch("/auth/demo/reset", { method: "POST" });
+      notifications.show({
+        title: "Demo reset",
+        message: "Demo data has been refreshed.",
+        color: "teal",
+      });
+      await loadDashboard(period);
+    } catch (requestError) {
+      notifications.show({
+        title: "Reset failed",
+        message: getErrorMessage(requestError),
+        color: "red",
+      });
+    } finally {
+      setResettingDemo(false);
     }
   }
 

@@ -3,7 +3,6 @@ import ReactDOM from "react-dom/client";
 import {
   MantineProvider,
   createTheme,
-  localStorageColorSchemeManager,
 } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { BrowserRouter } from "react-router-dom";
@@ -17,16 +16,12 @@ const theme = createTheme({
   primaryColor: "teal"
 });
 
-const colorSchemeManager = localStorageColorSchemeManager({
-  key: "finance-color-scheme",
-});
-
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <MantineProvider
       theme={theme}
       defaultColorScheme="light"
-      colorSchemeManager={colorSchemeManager}
+      forceColorScheme="light"
     >
       <Notifications position="top-right" />
       <BrowserRouter>
