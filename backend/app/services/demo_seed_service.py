@@ -227,7 +227,11 @@ class DemoSeedService:
                 month += 12
                 year -= 1
             days_in_month = monthrange(year, month)[1]
-            return datetime(year, month, min(day, days_in_month), tzinfo=UTC)
+            if months_back == 0:
+                safe_day = min(day, max(1, now.day - 1))
+            else:
+                safe_day = min(day, days_in_month)
+            return datetime(year, month, safe_day, tzinfo=UTC)
 
         await self._add_transaction(
             account_id=checking_id,
