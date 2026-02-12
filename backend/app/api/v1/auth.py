@@ -31,30 +31,39 @@ logger = logging.getLogger(__name__)
 
 
 async def enforce_login_rate_limit(request: Request) -> None:
-    settings = get_settings()
-    if not settings.rate_limit_enabled:
-        return
-    await enforce_rate_limit(
+    await _enforce_rate_limit(
         request,
-        RateLimitPolicy(
-            scope="auth_login",
-            limit=settings.rate_limit_login_limit,
-            window_seconds=settings.rate_limit_login_window_seconds,
-            fail_closed_on_unavailable=settings.rate_limit_auth_fail_closed,
-        ),
+        scope="auth_login",
+        limit=get_settings().rate_limit_login_limit,
+        window_seconds=get_settings().rate_limit_login_window_seconds,
     )
 
 
 async def enforce_register_rate_limit(request: Request) -> None:
+    await _enforce_rate_limit(
+        request,
+        scope="auth_register",
+        limit=get_settings().rate_limit_register_limit,
+        window_seconds=get_settings().rate_limit_register_window_seconds,
+    )
+
+
+async def _enforce_rate_limit(
+    request: Request,
+    *,
+    scope: str,
+    limit: int,
+    window_seconds: int,
+) -> None:
     settings = get_settings()
     if not settings.rate_limit_enabled:
         return
     await enforce_rate_limit(
         request,
         RateLimitPolicy(
-            scope="auth_register",
-            limit=settings.rate_limit_register_limit,
-            window_seconds=settings.rate_limit_register_window_seconds,
+            scope=scope,
+            limit=limit,
+            window_seconds=window_seconds,
             fail_closed_on_unavailable=settings.rate_limit_auth_fail_closed,
         ),
     )
