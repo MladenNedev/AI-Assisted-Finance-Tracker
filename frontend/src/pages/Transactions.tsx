@@ -699,17 +699,33 @@ export default function Transactions() {
             <Table.Th ta="right">Actions</Table.Th>
           </Table.Tr>
         </Table.Thead>
-        <Table.Tbody>
-          {transactions.map((transaction) => {
-            const account = accountLookup.get(transaction.account_id);
-            const category = transaction.category_id
-              ? categoryLookup.get(transaction.category_id)
-              : null;
-            const splits = transaction.splits ?? [];
+      <Table.Tbody>
+        {transactions.map((transaction) => {
+          const account = accountLookup.get(transaction.account_id);
+          const category = transaction.category_id
+            ? categoryLookup.get(transaction.category_id)
+            : null;
+          const splits = transaction.splits ?? [];
+          const isTransfer = Boolean(transaction.transfer_id);
+          const transferPartner = isTransfer
+            ? transactions.find(
+                (candidate) =>
+                  candidate.transfer_id === transaction.transfer_id &&
+                  candidate.id !== transaction.id,
+              )
+            : null;
+          const transferAccountName = transferPartner
+            ? accountLookup.get(transferPartner.account_id)?.name
+            : null;
+          const transferLabel = isTransfer
+            ? transaction.direction === "OUT"
+              ? `Transfer to ${transferAccountName ?? "account"}`
+              : `Transfer from ${transferAccountName ?? "account"}`
+            : null;
 
-            return (
-              <Table.Tr key={transaction.id}>
-                <Table.Td>
+          return (
+            <Table.Tr key={transaction.id}>
+              <Table.Td>
                   <Checkbox
                     checked={selectedIds.has(transaction.id)}
                     onChange={(event) =>
@@ -720,7 +736,9 @@ export default function Transactions() {
                 <Table.Td>{formatDate(transaction.occurred_at)}</Table.Td>
                 <Table.Td>
                   <Stack gap={0}>
-                    <Text>{transaction.merchant ?? "No description"}</Text>
+                    <Text>
+                      {transferLabel ?? transaction.merchant ?? "No description"}
+                    </Text>
                     {transaction.note ? (
                       <Text size="xs" c="dimmed">
                         {transaction.note}
@@ -738,7 +756,11 @@ export default function Transactions() {
                   </Stack>
                 </Table.Td>
                 <Table.Td>
-                  {splits.length > 0 ? (
+                  {isTransfer ? (
+                    <Badge color="blue" variant="light">
+                      Transfer
+                    </Badge>
+                  ) : splits.length > 0 ? (
                     <Stack gap={4}>
                       <Badge color="gray" variant="light">
                         Split transaction
