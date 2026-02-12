@@ -16,10 +16,9 @@ import { useAuth } from "../contexts/AuthContext";
 export default function Login() {
   const navigate = useNavigate();
   const { login, register } = useAuth();
-  const demoEmail =
-    import.meta.env.VITE_DEMO_EMAIL ?? "demo@finance-tracker.app";
-  const demoPassword =
-    import.meta.env.VITE_DEMO_PASSWORD ?? "Demo1234!";
+  const demoEmail = import.meta.env.VITE_DEMO_EMAIL;
+  const demoPassword = import.meta.env.VITE_DEMO_PASSWORD;
+  const hasDemoCredentials = Boolean(demoEmail && demoPassword);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -28,34 +27,29 @@ export default function Login() {
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setErrorMessage(null);
-    setSubmitting(true);
-
-    try {
+    await handleAuth(async () => {
       if (isRegisterMode) {
         await register({ email, password });
       }
       await login({ email, password });
-      navigate("/dashboard", { replace: true });
-    } catch (error) {
-      if (error instanceof ApiError) {
-        setErrorMessage(`Authentication failed (HTTP ${error.status})`);
-      } else {
-        setErrorMessage("Authentication failed");
-      }
-    } finally {
-      setSubmitting(false);
-    }
+    });
   };
 
   const onDemoLogin = async () => {
-    setErrorMessage(null);
-    setSubmitting(true);
+    if (!demoEmail || !demoPassword) {
+      return;
+    }
     setIsRegisterMode(false);
     setEmail(demoEmail);
     setPassword(demoPassword);
+    await handleAuth(() => login({ email: demoEmail, password: demoPassword }));
+  };
+
+  const handleAuth = async (action: () => Promise<void>) => {
+    setErrorMessage(null);
+    setSubmitting(true);
     try {
-      await login({ email: demoEmail, password: demoPassword });
+      await action();
       navigate("/dashboard", { replace: true });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -99,9 +93,11 @@ export default function Login() {
             <Button type="submit" loading={submitting}>
               {isRegisterMode ? "Register and sign in" : "Sign in"}
             </Button>
-            <Button variant="light" onClick={onDemoLogin} disabled={submitting}>
-              Try demo account
-            </Button>
+            {hasDemoCredentials ? (
+              <Button variant="light" onClick={onDemoLogin} disabled={submitting}>
+                Try demo account
+              </Button>
+            ) : null}
             <Anchor
               component="button"
               type="button"

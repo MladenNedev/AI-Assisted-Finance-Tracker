@@ -1,10 +1,4 @@
-import {
-  AppShell,
-  Button,
-  Group,
-  Menu,
-  Text,
-} from "@mantine/core";
+import { AppShell, Button, Group, Menu, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -18,37 +12,35 @@ import Categories from "./pages/Categories";
 import Transactions from "./pages/Transactions";
 import Recurring from "./pages/Recurring";
 
-function AppLayout() {
-  const { user } = useAuth();
-  const location = useLocation();
-  const isCompactNav = useMediaQuery("(max-width: 760px)");
-  const isStackedHeader = useMediaQuery("(max-width: 1035px)");
-  const headerHeight = user && (isCompactNav || isStackedHeader)
-    ? isCompactNav
-      ? 72
-      : 96
-    : 56;
-  const showInlineNav = user && !isCompactNav;
+const NAV_ITEMS = [
+  { label: "Dashboard", to: "/dashboard" },
+  { label: "Accounts", to: "/accounts" },
+  { label: "Transactions", to: "/transactions" },
+  { label: "Categories", to: "/categories" },
+  { label: "Budgets", to: "/budgets" },
+  { label: "Recurring", to: "/recurring" },
+] as const;
 
-  const navItems = [
-    { label: "Dashboard", to: "/dashboard" },
-    { label: "Accounts", to: "/accounts" },
-    { label: "Transactions", to: "/transactions" },
-    { label: "Categories", to: "/categories" },
-    { label: "Budgets", to: "/budgets" },
-    { label: "Recurring", to: "/recurring" },
-  ];
+function AppLayout() {
+  const { user, logout } = useAuth();
+  const location = useLocation();
+  const isCompactNav = useMediaQuery("(max-width: 760px)") ?? false;
+  const isStackedHeader = useMediaQuery("(max-width: 1035px)") ?? false;
+  const headerHeight =
+    user && (isCompactNav || isStackedHeader) ? (isCompactNav ? 72 : 96) : 56;
+  const showInlineNav = user && !isCompactNav;
 
   return (
     <AppShell padding="md" header={{ height: headerHeight }}>
       <AppShell.Header>
         <HeaderNav
           userEmail={user?.email}
-          navItems={navItems}
+          navItems={NAV_ITEMS}
           isCompactNav={isCompactNav}
           isStackedHeader={isStackedHeader}
           showInlineNav={showInlineNav}
           locationPath={location.pathname}
+          logout={logout}
         />
       </AppShell.Header>
       <AppShell.Main>
@@ -122,11 +114,12 @@ type NavItem = { label: string; to: string };
 
 type HeaderNavProps = {
   userEmail?: string;
-  navItems: NavItem[];
+  navItems: ReadonlyArray<NavItem>;
   isCompactNav: boolean;
   isStackedHeader: boolean;
   showInlineNav: boolean;
   locationPath: string;
+  logout: () => Promise<void> | void;
 };
 
 function HeaderNav({
@@ -136,6 +129,7 @@ function HeaderNav({
   isStackedHeader,
   showInlineNav,
   locationPath,
+  logout,
 }: HeaderNavProps) {
   return (
     <Group
@@ -161,6 +155,9 @@ function HeaderNav({
                 {item.label}
               </Button>
             ))}
+            <Button size="xs" variant="light" onClick={logout}>
+              Logout
+            </Button>
           </Group>
         ) : null}
       </Group>
@@ -184,6 +181,7 @@ function HeaderNav({
                   {item.label}
                 </Menu.Item>
               ))}
+              <Menu.Item onClick={logout}>Logout</Menu.Item>
             </Menu.Dropdown>
           </Menu>
         ) : null}

@@ -20,7 +20,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <MantineProvider
       theme={theme}
-      defaultColorScheme="light"
       forceColorScheme="light"
     >
       <Notifications position="top-right" />
