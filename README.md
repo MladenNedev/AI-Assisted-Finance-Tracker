@@ -1,30 +1,32 @@
 # Finance Tracker
 
-Full‑stack personal finance tracker built with FastAPI, React, PostgreSQL, and Redis. Implements production‑ready auth, reporting, caching, and CI with a layered architecture.
+**Live Demo:** https://ai-assisted-finance-tracker-production.up.railway.app  
+**Demo Account:** demo@finance-tracker.app / Demo1234!
 
-## Live Demo
-- Demo URL: **TBD**
-- Demo account: **demo@finance-tracker.app / Demo1234!**
+Full‑stack personal finance tracker built to showcase production‑ready patterns: secure auth, async data access, caching, reporting, and CI/CD.
 
-## Screenshot
-Capture the dashboard after logging in (summary cards + charts + heatmap + merchants visible).
+![Dashboard](docs/images/dashboard.png)
 
-```
-docs/images/dashboard.png
-```
+## Highlights (Recruiter‑Focused)
+- **End‑to‑end product:** Auth → accounts → transactions → budgets → reporting
+- **Production patterns:** session auth + CSRF, rate limiting, structured logging, Sentry
+- **Performance mindset:** async DB access, Redis caching, report invalidation
+- **Operational readiness:** health checks, migrations, CI on every PR
+- **Data portability:** CSV import/export for transactions and reports
 
-## Key Features
-- Secure session auth with CSRF, rate limits, and Redis‑backed sessions
-- Accounts, transactions, categories, and budgets (including rollover + templates)
-- Reporting dashboard: cashflow, category trends, net worth, heatmap, top merchants
-- CSV exports (transactions + reporting)
-- Observability: Sentry, structured logging, health checks
+## What You Can Do
+- Create accounts, categories, transactions (including splits, transfers, attachments)
+- Build monthly budgets with rollover and templates
+- Use rich reporting: cashflow trends, category breakdown, heatmap, top merchants
+- Export datasets to CSV
+- Explore via demo mode (seeded data + reset)
 
 ## Tech Stack
-- Backend: FastAPI, SQLAlchemy (async), Alembic, Redis
-- Frontend: React, Vite, Mantine, Recharts
-- Infra: Docker Compose, Railway
-- CI: GitHub Actions
+- **Backend:** FastAPI, async SQLAlchemy, Alembic, Redis, PostgreSQL
+- **Frontend:** React, Vite, Mantine, Recharts
+- **Infra/Deploy:** Docker Compose (local), Railway (prod)
+- **CI:** GitHub Actions
+
 
 ## Architecture (Layered)
 ```
