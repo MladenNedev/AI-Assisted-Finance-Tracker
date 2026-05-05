@@ -1,8 +1,5 @@
 # Finance Tracker
 
-**Live Demo:** https://ai-assisted-finance-tracker-production.up.railway.app  
-**Demo Account:** demo@finance-tracker.app / Demo1234!
-
 Full‑stack personal finance tracker built to showcase production‑ready patterns: secure auth, async data access, caching, reporting, and CI/CD.
 
 ![Dashboard](docs/images/dashboard.png)
